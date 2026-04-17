@@ -1,0 +1,83 @@
+<canvas id="game"></canvas>
+
+<script>
+
+    //canvas setup
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const H = canvas.width = 480;
+    const W = canvas.height = 700;
+
+
+    //state and entities collections
+    let gameState = 'start'; // 'start' | 'playing' | 'gameover'
+    let score = 0;
+    let wave = 1;
+
+    let player = null;
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let particles = [];
+    let powerUps = [];
+
+    //game loop
+
+    function loop(now) {
+        const dt = Math.min(now - lastTime, 50);
+        lastTime = now;
+
+        if (gameState === 'playing') update(dt, now);
+        draw(now);
+        console.log("Calling")
+        requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+
+
+    //keep keys in an object for easy access (for smooth animations and multiple keys at once)
+    const keys = {};
+    document.addEventListener("keydown", e => {
+        keys[e.code] = true;
+    });
+    document.addEventListener("keyup", e => {
+        keys[e.code] = false;
+    });
+
+    //entities factories
+    function createPlayer() {
+        return {
+            x: W / 2, y: H - 80, w: 36, h: 40, lives: 3, invincible: 0, puwerUp: null, powerTimer: 0,
+        };
+    }
+
+    function createEnemy(x, y, type) {
+        const t = ENEMY_TEMPLATES[type];
+        return { x, y, w: t.w, h: t.h, hp: t.hp, maxHp: t.hp }
+    }
+
+    //wave spawning
+    function spawnWave(waveNum) {
+        enemies = [];
+        waveDone = false;
+
+        if (waveNum % 5 === 0) {
+            //boos wave
+        } else {
+
+            //grid: rows x cols, type depends on row and waveNum
+            const rows = Math.min(2, + Math.floor(waveNum / 3), 5);
+            const cols = Math.min(4 + Math.floor(waveNum / 2), 8);
+
+
+            //place enemies at negative y so they fly in from the top
+        }
+    }
+
+
+
+    function hits(a, b) {
+        return Math.abs(a.x - b.x) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+    }
+</script>

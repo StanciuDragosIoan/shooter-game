@@ -1272,6 +1272,55 @@
     //  BOOT
     // ═══════════════════════════════════════════════════════════
 
+    // Generate favicon using the same Canvas 2D API as the game —
+    // a 32×32 version of the player ship on the dark space background.
+    (function setFavicon() {
+      const fc = document.createElement('canvas');
+      fc.width = fc.height = 32;
+      const fctx = fc.getContext('2d');
+
+      // Background with rounded corners
+      fctx.fillStyle = '#060616';
+      fctx.beginPath();
+      fctx.roundRect(0, 0, 32, 32, 5);
+      fctx.fill();
+
+      // Stars
+      [[4, 5], [26, 9], [22, 3], [8, 20], [28, 24]].forEach(([x, y]) => {
+        fctx.fillStyle = 'rgba(255,255,255,0.65)';
+        fctx.fillRect(x, y, 1.5, 1.5);
+      });
+
+      // Ship body
+      fctx.fillStyle = '#60a5fa';
+      fctx.beginPath();
+      fctx.moveTo(16, 2);
+      fctx.lineTo(27, 30);
+      fctx.lineTo(5, 30);
+      fctx.closePath();
+      fctx.fill();
+
+      // Engine glow
+      fctx.fillStyle = '#facc15';
+      fctx.shadowColor = '#facc15';
+      fctx.shadowBlur = 4;
+      fctx.beginPath();
+      fctx.ellipse(16, 30, 4, 3, 0, 0, Math.PI * 2);
+      fctx.fill();
+      fctx.shadowBlur = 0;
+
+      // Cockpit window
+      fctx.fillStyle = 'rgba(190,235,255,0.85)';
+      fctx.beginPath();
+      fctx.ellipse(16, 13, 3, 4, 0, 0, Math.PI * 2);
+      fctx.fill();
+
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      link.href = fc.toDataURL('image/png');
+      document.head.appendChild(link);
+    })();
+
     initStars();
     requestAnimationFrame(loop);
 
