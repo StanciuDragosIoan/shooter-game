@@ -493,7 +493,7 @@ function drawStars(){
 // ═══════════════════════════════════════════════════════════
 
 function createPlayer(){
-  return {wx:0,wy:0,wz:PLAYER_Z, bank:0, lives:3, invincible:0, powerUp:null, powerTimer:0, radius:1.8};
+  return {wx:0,wy:0,wz:PLAYER_Z, bank:0, lives:5, invincible:0, powerUp:null, powerTimer:0, radius:1.8};
 }
 
 
@@ -628,8 +628,6 @@ function hurtPlayer(){
 function update(dt,now){
   const tick=dt/16.667;
 
-  updateStars(tick);
-
   // Camera smoothly follows player X
   camX+=(player.wx*0.82-camX)*0.09;
 
@@ -678,7 +676,7 @@ function update(dt,now){
   // ── Enemies ───────────────────────────────────────────
   for(const e of enemies){
     if(e.type==='zigzag'){
-      e.angle+=0.055*tick; e.wx+=Math.sin(e.angle)*0.18*tick; e.wz-=e.speed*tick;
+      e.angle+=0.055*tick; e.wx+=Math.sin(e.angle)*0.18*tick; e.wz-=e.speed*tick; e.yaw+=0.07*tick;
     } else if(e.type==='boss'){
       e.angle+=0.02*tick; e.wx=Math.sin(e.angle)*7;
       e.wz=Math.max(e.wz-e.speed*tick,22);
@@ -752,7 +750,7 @@ function drawScene(now){
   drawStars();
 
   // Perspective grid on the "floor" — gives spatial reference
-  ctx.strokeStyle='rgba(30,80,160,0.16)'; ctx.lineWidth=0.5;
+  ctx.strokeStyle='rgba(40,100,220,0.25)'; ctx.lineWidth=0.5;
   for(let x=-30;x<=30;x+=5){
     const a=project(x,-2,5),b=project(x,-2,160); if(!a||!b)continue;
     ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -775,19 +773,20 @@ function drawScene(now){
     ctx.fillText(p.type==='spread'?'S':p.type==='shield'?'⬡':'♥',sp.x,sp.y);
   }
 
-  // Enemy bullets
-  ctx.shadowColor='#f87171'; ctx.shadowBlur=6;
+  // Enemy bullets — rendered as streaks (trail extends back toward enemy)
+  ctx.shadowColor='#f87171'; ctx.shadowBlur=6; ctx.strokeStyle='#f87171';
   for(const b of enemyBullets){
-    const p=project(b.wx,b.wy,b.wz); if(!p)continue;
-    ctx.fillStyle='#f43f5e'; ctx.beginPath();
-    ctx.arc(p.x,p.y,Math.max(1.5,0.35*p.s),0,Math.PI*2); ctx.fill();
+    const p1=project(b.wx,b.wy,b.wz), p2=project(b.wx,b.wy,b.wz+0.9);
+    if(!p1||!p2)continue;
+    ctx.lineWidth=Math.max(1.5,0.13*p1.s);
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
   }
   ctx.shadowBlur=0;
 
   // Enemies — back to front
   [...enemies].sort((a,b)=>b.wz-a.wz).forEach(e=>{
     const t=ETYPES[e.type], hf=e.hitFlash>0?e.hitFlash/6:0;
-    const yaw=e.type==='boss'?e.yaw:e.type==='basic'?now/800:Math.PI;
+    const yaw=e.type==='boss'?e.yaw:e.type==='basic'?now/800:e.type==='zigzag'?e.yaw:Math.PI;
     renderMesh(t.verts,t.faces,[e.wx,e.wy,e.wz],yaw,t.sc,0,hf);
 
     // HP bar for tank / boss
@@ -896,6 +895,13 @@ function drawHUD(now){
 
 function drawStartScreen(now){
   const mob='ontouchstart' in window;
+  // Slowly rotating 3D ship preview between title and instructions
+  const sPos=[0,5.5,21], sYaw=now/1200, sBank=Math.sin(now/2000)*0.2;
+  renderMesh(PLAYER_VERTS,PLAYER_FACES,sPos,sYaw,0.38,sBank,0);
+  const eng1=toWorld(PLAYER_VERTS[7],sPos,sYaw,sBank,0.38);
+  const eng2=toWorld(PLAYER_VERTS[8],sPos,sYaw,sBank,0.38);
+  engineGlow(eng1[0],eng1[1],eng1[2],250,204,21);
+  engineGlow(eng2[0],eng2[1],eng2[2],250,204,21);
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillStyle='#60a5fa'; ctx.font='bold 38px Courier New';
   ctx.shadowColor='#60a5fa'; ctx.shadowBlur=20;
@@ -961,6 +967,7 @@ function draw(now){
 
 function loop(now){
   const dt=Math.min(now-lastTime,50); lastTime=now;
+  updateStars(dt/16.667);
   if(gameState==='playing') update(dt,now);
   draw(now);
   requestAnimationFrame(loop);

@@ -443,6 +443,20 @@ Three things scale automatically with depth (via `project` and the `s` value):
 
 When a star reaches Z < 0.5 (past the camera), it resets to a new random position far away. This creates the infinite tunnel effect.
 
+`updateStars` is called from the **main loop** (not from `update`), so stars stream on every screen — start, playing, and game over:
+
+```js
+function loop(now) {
+  const dt = Math.min(now - lastTime, 50); lastTime = now;
+  updateStars(dt / 16.667);   // always animate — not gated by gameState
+  if (gameState === 'playing') update(dt, now);
+  draw(now);
+  requestAnimationFrame(loop);
+}
+```
+
+If you put `updateStars` inside `update()` instead, stars freeze on the start and game-over screens, which looks wrong.
+
 ---
 
 ## Step 10 — Ship banking
@@ -514,7 +528,7 @@ The key is `p.s` — the projection scale. At `wz=8`, `p.s ≈ 52`, so `pr = 0.3
 The grid on the "floor" of the scene gives your eye a reference plane for depth — without it the 3D scene feels ungrounded.
 
 ```js
-ctx.strokeStyle = 'rgba(30,80,160,0.16)';
+ctx.strokeStyle = 'rgba(40,100,220,0.25)';
 ctx.lineWidth   = 0.5;
 
 // Vertical lines: constant X, span from near to far Z
@@ -553,7 +567,7 @@ function createPlayer() {
   return {
     wx: 0, wy: 0, wz: 8,    // world position
     bank: 0,                  // visual roll angle
-    lives: 3,
+    lives: 5,
     // ...
   };
 }
@@ -572,8 +586,9 @@ if (e.type === 'basic') {
 }
 if (e.type === 'zigzag') {
   e.angle += 0.055 * tick;
-  e.wx += Math.sin(e.angle) * 0.18 * tick;  // sine wave in X
-  e.wz -= e.speed * tick;
+  e.wx  += Math.sin(e.angle) * 0.18 * tick;  // sine wave in X
+  e.wz  -= e.speed * tick;
+  e.yaw += 0.07 * tick;                       // barrel-roll spin
 }
 if (e.type === 'boss') {
   e.angle += 0.02 * tick;
@@ -594,21 +609,38 @@ b.wx += (b.dx || 0);      // spread shot bullets drift sideways
 b.wz += BULLET_SPEED * tick;
 ```
 
-Bullets are drawn as perspective-correct line segments — two projected points connected:
+**Enemy yaw** is picked per-type before calling `renderMesh`:
 
 ```js
-const p1 = project(b.wx, b.wy, b.wz);
-const p2 = project(b.wx, b.wy, b.wz - 1.2);  // tail of the streak
-if (!p1 || !p2) continue;
-ctx.strokeStyle = '#facc15';
-ctx.lineWidth   = Math.max(1.5, 0.12 * p1.s);  // thicker when close
-ctx.beginPath();
-ctx.moveTo(p1.x, p1.y);
-ctx.lineTo(p2.x, p2.y);
-ctx.stroke();
+const yaw = e.type === 'boss'   ? e.yaw          // boss slowly rotates (stored on entity)
+          : e.type === 'basic'  ? now / 800       // saucer spins continuously (time-driven)
+          : e.type === 'zigzag' ? e.yaw           // dart barrel-rolls (stored on entity)
+          : Math.PI;                              // tank: fixed at π faces camera
 ```
 
-The bullet is always 1.2 world units long, but when close (high `p.s`) it appears as a long glowing streak. When far (low `p.s`) it's a short blip.
+- **Boss and dart** store `yaw` on the entity so rotation persists between frames.
+- **Saucer** uses `now / 800` — time-driven, so it always spins at a constant rate without needing per-entity state.
+- **Tank** is fixed at `Math.PI` (nose pointing toward camera) so it always looks like an armored block facing you head-on.
+
+**Player and enemy bullets** are both drawn as perspective-correct streaks — a line segment from the bullet's current position to a trail point behind it:
+
+```js
+// Player bullet — travels in +Z (away from camera), trail is at lower Z
+const p1 = project(b.wx, b.wy, b.wz);
+const p2 = project(b.wx, b.wy, b.wz - 1.2);
+ctx.strokeStyle = '#facc15';
+ctx.lineWidth   = Math.max(1.5, 0.12 * p1.s);
+ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+
+// Enemy bullet — travels in -Z (toward camera), trail is at higher Z
+const p1 = project(b.wx, b.wy, b.wz);
+const p2 = project(b.wx, b.wy, b.wz + 0.9);
+ctx.strokeStyle = '#f87171';
+ctx.lineWidth   = Math.max(1.5, 0.13 * p1.s);
+ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+```
+
+The trail always extends in the direction the bullet came from — behind the head. When close (`p.s` is large) both streaks are thick glowing lines. When far they are short blips. Drawing them as lines rather than dots makes their direction of travel immediately readable.
 
 ---
 
@@ -734,24 +766,114 @@ player.wx += mx * PLAYER_SPEED * tick;
 
 ---
 
+## Step 18 — Screens and the 3D start screen ship
+
+There are three game states (`'start'`, `'playing'`, `'gameover'`) handled the same way as the 2D version. The key difference is the start screen shows a **live 3D rendering** of the player ship — slowly yawing and banking — rather than a flat 2D drawing.
+
+```js
+function drawStartScreen(now) {
+  // Render the player mesh at a fixed world position, slowly rotating
+  const sPos  = [0, 5.5, 21];
+  const sYaw  = now / 1200;                   // full rotation every ~7.5 seconds
+  const sBank = Math.sin(now / 2000) * 0.2;   // gentle banking oscillation
+
+  renderMesh(PLAYER_VERTS, PLAYER_FACES, sPos, sYaw, 0.38, sBank, 0);
+
+  // Engine glows track the actual world position of the engine verts as the ship rotates.
+  // toWorld() is called here directly — not just inside renderMesh — to get the
+  // world-space coordinates of specific vertices (7 = left engine, 8 = right engine).
+  const eng1 = toWorld(PLAYER_VERTS[7], sPos, sYaw, sBank, 0.38);
+  const eng2 = toWorld(PLAYER_VERTS[8], sPos, sYaw, sBank, 0.38);
+  engineGlow(eng1[0], eng1[1], eng1[2], 250, 204, 21);
+  engineGlow(eng2[0], eng2[1], eng2[2], 250, 204, 21);
+
+  // Text rendered on top of the ship
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // ...title, instructions, blinking prompt, hi-score...
+}
+```
+
+**Why `sPos = [0, 5.5, 21]`?** We want the ship to project to roughly screen center-X and about 20px above screen-center-Y — the same visual position as the flat ship in the 2D start screen. Working backward from `project()`:
+
+```
+screenY = H/2 - (wy - CAM_Y) * (FOCAL / wz)
+       = 350 - (5.5 - 4.5) * (420 / 21)
+       = 350 - 1 * 20
+       = 330   ≈ H/2 - 20  ✓
+```
+
+**Why call `toWorld` explicitly for the engine glows?** `renderMesh` internally calls `toWorld` for every vertex, but it doesn't expose those results. To position the engine glows at the correct world location as the ship rotates, you compute the world-space position of the engine vertices yourself — passing the same `sPos`, `sYaw`, `sBank`, and scale. This keeps the glows locked to the rotating mesh.
+
+The game-over screen is identical to the 2D version — a semi-transparent overlay with score and a blinking restart prompt:
+
+```js
+function drawGameOverScreen(now) {
+  ctx.fillStyle = 'rgba(6,6,22,0.72)';
+  ctx.fillRect(0, 0, W, H);
+  // ...title, score, wave, hi-score notification, blinking restart text...
+}
+```
+
+The `draw()` function checks state and routes accordingly:
+
+```js
+function draw(now) {
+  // Background gradient (always)
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#02020e'); bg.addColorStop(1, '#060616');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  if (gameState === 'start') {
+    drawStars(); drawStartScreen(now); return;
+  }
+  if (gameState === 'gameover') {
+    drawStars();
+    // draw remaining particles so the explosion finishes playing out
+    for (const p of particles) { /* project → arc */ }
+    drawGameOverScreen(now); return;
+  }
+  drawScene(now);
+  drawHUD(now);
+}
+```
+
+Particles are drawn on the game-over screen so explosions don't cut off abruptly the moment the player dies.
+
+---
+
 ## The draw order
 
 Drawing order matters in 3D — you generally go back to front:
 
 ```
-1. Background gradient wipe
-2. Stars (furthest — z=180 down to z=5)
-3. Perspective grid (floor plane)
-4. Power-ups
-5. Enemy bullets
-6. Enemies (sorted back→front by .wz)
-7. Player bullets
-8. Particles
-9. Player ship (always drawn last — always on top)
-10. HUD (2D overlay in screen space — no projection)
+Start screen:
+  1. Background gradient wipe
+  2. Stars
+  3. Rotating 3D ship (renderMesh) + engine glows
+  4. Text (title, instructions, blinking prompt, hi-score)
+
+Playing:
+  1. Background gradient wipe
+  2. Stars (furthest — z=180 down to z=5)
+  3. Perspective grid (floor plane at y=-2)
+  4. Power-ups (project → pulsing arc)
+  5. Enemy bullets (project two points → streak)
+  6. Enemies sorted back→front by .wz → renderMesh + HP bars + engine glows
+  7. Player bullets (project two points → streak)
+  8. Particles (project → arc)
+  9. Player ship (renderMesh) + shield ring + engine glows
+  10. HUD (2D overlay — no projection)
+
+Game over:
+  1. Background gradient wipe
+  2. Stars
+  3. Remaining particles (so explosions finish playing)
+  4. Semi-transparent overlay + score text + blinking restart prompt
 ```
 
 The HUD is still drawn in plain 2D canvas coordinates — `ctx.fillText`, `ctx.fillRect` — with no projection. It's a flat overlay on top of the 3D scene.
+
+Enemy bullets and player bullets are both streaks (`lineTo`), not dots. The direction of the trail reveals which way the bullet is traveling — player bullets trail backward toward the camera, enemy bullets trail backward toward the enemies.
 
 ---
 
@@ -764,12 +886,11 @@ Boot
 
 Each frame (loop)
   → dt = now - lastTime
-  → tick = dt / 16.667
-  → if playing: update(dt, now, tick)
+  → updateStars(dt / 16.667)      ← always, not gated by gameState
+  → if playing: update(dt, now)
   → draw(now)
 
-update(dt, now, tick)
-  → updateStars(tick)
+update(dt, now)
   → lerp camX toward player.wx * 0.82
   → read keys / touch → compute moveX, moveY
   → move player: wx += moveX * SPEED * tick
@@ -787,15 +908,17 @@ update(dt, now, tick)
 
 draw(now)
   → background gradient
-  → drawStars()
-  → perspective grid
-  → power-ups (project → arc)
-  → enemy bullets (project → arc)
-  → enemies sorted by .wz → renderMesh() each
-  → player bullets (project two points → lineTo streak)
-  → particles (project → arc)
-  → player ship → renderMesh()
-  → engine glows → engineGlow()
+  → if start: drawStars() → drawStartScreen() [renderMesh ship + text] → return
+  → if gameover: drawStars() → particles → drawGameOverScreen() → return
+  → drawScene(now):
+      → drawStars()
+      → perspective grid
+      → power-ups (project → pulsing arc)
+      → enemy bullets (project two points → lineTo streak, red)
+      → enemies sorted by .wz → renderMesh() + HP bars + engineGlow()
+      → player bullets (project two points → lineTo streak, yellow)
+      → particles (project → arc)
+      → player ship → renderMesh() + shield ring + engineGlow()
   → drawHUD() [2D overlay, no projection]
 
 renderMesh(localVerts, faces, pos, yaw, scale, bank, hitFlash)

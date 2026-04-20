@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Step 3 — Player moves</title>
+  <style>
+    body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+
+const canvas = document.getElementById('game');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width  = 480;
+const H = canvas.height = 700;
+
+function drawShip(x, y) {
+  const w = 36, h = 40;
+  ctx.fillStyle = '#60a5fa';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h/2); ctx.lineTo(x + w/2, y + h/2); ctx.lineTo(x - w/2, y + h/2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#facc15'; ctx.shadowColor = '#facc15'; ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.ellipse(x, y + h/2, w/7, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(190,235,255,0.75)';
+  ctx.beginPath(); ctx.ellipse(x, y - h/6, w/5, h/5, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+const stars = [];
+for (let i = 0; i < 80; i++) {
+  stars.push({ x: Math.random()*W, y: Math.random()*H, speed: 0.3+Math.random()*1.2, size: Math.random()<0.85?1:2, brightness: 0.25+Math.random()*0.75 });
+}
+
+// ── NEW: Input ────────────────────────────────────────────────
+// We track which keys are currently held — not which were just pressed.
+// The keys object maps key codes to true/false.
+// Inside the loop we check "is ArrowLeft held right now?" every frame.
+// This gives smooth continuous movement.
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') e.preventDefault(); // stop Space from scrolling the page
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+const SPEED = 5;
+
+// ── NEW: Player object ────────────────────────────────────────
+// w and h are used to clamp position so the ship can't leave the canvas.
+
+const player = { x: W / 2, y: H - 100, w: 36, h: 40 };
+
+function loop() {
+
+  // ── NEW: Move player based on held keys ──────────────────────
+  if (keys['ArrowLeft'] || keys['KeyA']) player.x -= SPEED;
+  if (keys['ArrowRight']|| keys['KeyD']) player.x += SPEED;
+  if (keys['ArrowUp']   || keys['KeyW']) player.y -= SPEED;
+  if (keys['ArrowDown'] || keys['KeyS']) player.y += SPEED;
+
+  // Clamp: keep ship fully inside the canvas.
+  // player.x can't go below w/2 (left edge) or above W - w/2 (right edge).
+  player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+  player.y = Math.max(player.h / 2, Math.min(H - player.h / 2, player.y));
+
+  // Update stars
+  for (const s of stars) {
+    s.y += s.speed;
+    if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+  }
+
+  // Draw
+  ctx.fillStyle = '#060616';
+  ctx.fillRect(0, 0, W, H);
+
+  for (const s of stars) {
+    ctx.globalAlpha = s.brightness;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(s.x, s.y, s.size, s.size);
+  }
+  ctx.globalAlpha = 1;
+
+  drawShip(player.x, player.y);
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

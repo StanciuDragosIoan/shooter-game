@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Step 7 — Particles</title>
+  <style>
+    body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Courier New', monospace; }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+
+const canvas = document.getElementById('game');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width  = 480;
+const H = canvas.height = 700;
+
+function drawShip(x, y) {
+  const w = 36, h = 40;
+  ctx.fillStyle = '#60a5fa';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h/2); ctx.lineTo(x + w/2, y + h/2); ctx.lineTo(x - w/2, y + h/2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#facc15'; ctx.shadowColor = '#facc15'; ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.ellipse(x, y + h/2, w/7, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(190,235,255,0.75)';
+  ctx.beginPath(); ctx.ellipse(x, y - h/6, w/5, h/5, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+const stars = [];
+for (let i = 0; i < 80; i++) {
+  stars.push({ x: Math.random()*W, y: Math.random()*H, speed: 0.3+Math.random()*1.2, size: Math.random()<0.85?1:2, brightness: 0.25+Math.random()*0.75 });
+}
+
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') e.preventDefault(); });
+document.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+const SPEED = 5, BULLET_SPEED = 12, COOLDOWN = 200;
+const player = { x: W/2, y: H-100, w: 36, h: 40 };
+let bullets = [], lastShot = 0, score = 0;
+
+function hits(a, b) {
+  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+         Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+}
+
+let enemies = [];
+function spawnEnemies() {
+  enemies = [];
+  for (let row = 0; row < 2; row++)
+    for (let col = 0; col < 5; col++)
+      enemies.push({ x: 80+col*80, y: -40-row*60, w: 32, h: 28, speed: 1.5 });
+}
+spawnEnemies();
+
+// ── NEW: Particles ────────────────────────────────────────────
+// An explosion scatters small circles in all directions.
+// Each particle has velocity (dx, dy), a life value (1.0 → 0), and a size.
+// life drives both the alpha and the radius as it counts down — they fade and shrink together.
+
+let particles = [];
+
+function explode(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    const angle = (Math.PI * 2 * i) / 10 + Math.random() * 0.5;
+    const speed = 1 + Math.random() * 3;
+    particles.push({
+      x, y,
+      dx:    Math.cos(angle) * speed,
+      dy:    Math.sin(angle) * speed,
+      life:  1,
+      decay: 0.025 + Math.random() * 0.02,
+      size:  2 + Math.random() * 3,
+      color,
+    });
+  }
+}
+
+function loop() {
+  const now = performance.now();
+
+  // Player
+  if (keys['ArrowLeft'] || keys['KeyA']) player.x -= SPEED;
+  if (keys['ArrowRight']|| keys['KeyD']) player.x += SPEED;
+  if (keys['ArrowUp']   || keys['KeyW']) player.y -= SPEED;
+  if (keys['ArrowDown'] || keys['KeyS']) player.y += SPEED;
+  player.x = Math.max(player.w/2, Math.min(W - player.w/2, player.x));
+  player.y = Math.max(player.h/2, Math.min(H - player.h/2, player.y));
+
+  if (keys['Space'] && now - lastShot > COOLDOWN) {
+    lastShot = now;
+    bullets.push({ x: player.x, y: player.y - 20, dy: -BULLET_SPEED, w: 4, h: 12 });
+  }
+
+  // Bullets + collision
+  bullets = bullets.filter(b => {
+    b.y += b.dy;
+    if (b.y < -20) return false;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      if (hits(b, enemies[i])) {
+        score += 100;
+        explode(enemies[i].x, enemies[i].y, '#f87171'); // ← call explode here
+        enemies.splice(i, 1);
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Enemies
+  for (const e of enemies) e.y += e.speed;
+  enemies = enemies.filter(e => e.y < H + 40);
+  if (enemies.length === 0) spawnEnemies();
+
+  // ── NEW: Update particles ─────────────────────────────────────
+  // Move each particle, apply friction (0.96), count down life.
+  // filter removes it when life reaches 0.
+  particles = particles.filter(p => {
+    p.x += p.dx; p.y += p.dy;
+    p.dx *= 0.96; p.dy *= 0.96; // friction — they slow down and drift
+    p.life -= p.decay;
+    return p.life > 0;
+  });
+
+  // Stars
+  for (const s of stars) {
+    s.y += s.speed;
+    if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+  }
+
+  // Draw
+  ctx.fillStyle = '#060616';
+  ctx.fillRect(0, 0, W, H);
+
+  for (const s of stars) {
+    ctx.globalAlpha = s.brightness; ctx.fillStyle = '#fff';
+    ctx.fillRect(s.x, s.y, s.size, s.size);
+  }
+  ctx.globalAlpha = 1;
+
+  drawShip(player.x, player.y);
+
+  ctx.fillStyle = '#facc15'; ctx.shadowColor = '#facc15'; ctx.shadowBlur = 8;
+  for (const b of bullets) ctx.fillRect(b.x - b.w/2, b.y - b.h/2, b.w, b.h);
+  ctx.shadowBlur = 0;
+
+  for (const e of enemies) {
+    ctx.fillStyle = '#f87171'; ctx.shadowColor = '#f87171'; ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y + e.h/2); ctx.lineTo(e.x + e.w/2, e.y - e.h/2); ctx.lineTo(e.x - e.w/2, e.y - e.h/2);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(e.x, e.y - 2, e.w/5, e.h/6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ── NEW: Draw particles ───────────────────────────────────────
+  // globalAlpha = p.life makes them fade as life drops from 1 to 0.
+  // radius = p.size * p.life makes them shrink at the same rate.
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle   = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = '#c4c4e0'; ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText(`SCORE  ${score}`, 12, 12);
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
