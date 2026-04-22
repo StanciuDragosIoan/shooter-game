@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>spawnWave Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: sans-serif;
+            text-align: center;
+        }
+
+        canvas {
+            background: #000;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #333;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>spawnWave(n) Visual Demo</h2>
+    <button onclick="nextWave()">Next Wave</button>
+    <p id="info"></p>
+    <canvas id="c" width="600" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+
+        let enemies = [];
+        let wave = 1;
+
+        function createEnemy(x, y) {
+            return { x, y, w: 28, h: 20 };
+        }
+
+        function spawnWave(n) {
+            enemies = [];
+
+            const cols = Math.min(4 + n, 9);
+            const rows = Math.min(1 + Math.floor(n / 2), 4);
+            const spacing = Math.floor((W - 60) / cols);
+            const startX = (W - (cols - 1) * spacing) / 2;
+
+            document.getElementById('info').textContent =
+                `Wave ${n} → cols: ${cols}, rows: ${rows}, spacing: ${spacing}, startX: ${Math.round(startX)}`;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    enemies.push(createEnemy(
+                        startX + c * spacing,
+                        -40 - r * 50
+                    ));
+                }
+            }
+        }
+
+        function update() {
+            // move enemies down slowly so you see spawn
+            enemies.forEach(e => e.y += 0.5);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            enemies.forEach(e => {
+                ctx.fillStyle = 'lime';
+                ctx.fillRect(e.x, e.y, e.w, e.h);
+            });
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        function nextWave() {
+            wave++;
+            spawnWave(wave);
+        }
+
+        spawnWave(wave);
+        loop();
+    </script>
+
+
+
+    <div style="max-width:800px;margin:20px auto;text-align:left;background:#1a1a1a;padding:15px;border-radius:10px;">
+        <h3>spawnWave(n) – Code + Explanation</h3>
+        <pre style="background:#000;padding:10px;overflow:auto;">
+function spawnWave(n) {
+  enemies = [];
+  waveDone = false;
+
+  const cols = Math.min(4 + n, 9);
+  const rows = Math.min(1 + Math.floor(n / 2), 4);
+
+  const spacing = Math.floor((W - 60) / cols);
+  const startX = (W - (cols - 1) * spacing) / 2;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      enemies.push(createEnemy(
+        startX + c * spacing,
+        -40 - r * 50
+      ));
+    }
+  }
+}
+</pre>
+
+        <ul>
+            <li><b>enemies = []</b> → clears previous enemies</li>
+            <li><b>cols</b> → number of enemies per row (grows with wave, max 9)</li>
+            <li><b>rows</b> → number of rows (grows slower, max 4)</li>
+            <li><b>spacing</b> → horizontal distance between enemies</li>
+            <li><b>startX</b> → starting X so the whole grid is centered</li>
+            <li><b>r loop</b> → goes row by row (top to bottom)</li>
+            <li><b>c loop</b> → fills each row left to right</li>
+            <li><b>x = startX + c * spacing</b> → positions enemies horizontally</li>
+            <li><b>y = -40 - r * 50</b> → spawns enemies above the screen</li>
+        </ul>
+
+        <p><b>Try this:</b> Click "Next Wave" and watch how cols, rows, and startX change.</p>
+    </div>
+
+</body>
+
+</html>

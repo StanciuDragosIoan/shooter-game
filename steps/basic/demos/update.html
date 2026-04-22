@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Game Update Loop Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: sans-serif;
+            text-align: center;
+        }
+
+        canvas {
+            background: #000;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #333;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>update(dt, now) – Visual Demo</h2>
+    <p>Move with ← → or A/D. Shoot with Space.</p>
+    <p id="hud"></p>
+    <canvas id="c" width="700" height="420"></canvas>
+    <div>
+        <button onclick="reset()">Reset</button>
+        <button onclick="spawn()">Spawn Wave</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+
+        // ---- Game state ----
+        let player, bullets, enemyBullets, enemies;
+        let keys = {};
+        let shootTimer = 0;
+        let score = 0;
+        let wave = 1;
+        let waveDone = false;
+        let waveTimer = 0;
+
+        // ---- Tunables ----
+        const PLAYER_SPEED = 4;
+        const BULLET_SPEED = 6;
+        const SHOOT_COOLDOWN = 180; // ms
+        const WAVE_PAUSE = 800; // ms
+
+        function createEnemy(x, y) {
+            return { x, y, w: 28, h: 20, speed: 0.6 + wave * 0.1, shootRate: 0.01 };
+        }
+
+        function spawnWave(n) {
+            enemies = [];
+            waveDone = false;
+            const cols = Math.min(4 + n, 9);
+            const rows = Math.min(1 + Math.floor(n / 2), 4);
+            const spacing = Math.floor((W - 60) / cols);
+            const startX = (W - (cols - 1) * spacing) / 2;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    enemies.push(createEnemy(startX + c * spacing, -40 - r * 50));
+                }
+            }
+        }
+
+        function hits(a, b) {
+            return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+                Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+        }
+
+        // ---- INPUT ----
+        document.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            if (e.code === 'Space') e.preventDefault();
+        });
+        document.addEventListener('keyup', e => keys[e.code] = false);
+
+        // ---- CORE UPDATE (the thing you asked about) ----
+        function update(dt, now) {
+            // 1) Move player (left/right)
+            if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
+            if (keys['ArrowRight'] || keys['KeyD']) player.x += PLAYER_SPEED;
+
+            // Clamp inside screen
+            player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+
+            // 2) Shoot with cooldown
+            if (keys['Space'] && now - shootTimer > SHOOT_COOLDOWN) {
+                shootTimer = now;
+                bullets.push({ x: player.x, y: player.y - player.h / 2, w: 4, h: 12, dy: -BULLET_SPEED });
+            }
+
+            // 3) Move bullets up and remove off-screen
+            bullets = bullets.filter(b => { b.y += b.dy; return b.y > 0; });
+
+            // 4) Move enemies down and randomly fire
+            for (const e of enemies) {
+                e.y += e.speed;
+                if (Math.random() < e.shootRate) {
+                    enemyBullets.push({ x: e.x, y: e.y + e.h / 2, w: 4, h: 10, dy: 2 + wave * 0.2 });
+                }
+            }
+
+            // 5) Player bullets vs enemies (collision)
+            bullets = bullets.filter(b => {
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    if (!hits(b, enemies[i])) continue;
+                    score += 100;
+                    enemies.splice(i, 1); // remove enemy
+                    return false; // remove bullet
+                }
+                return true; // keep bullet
+            });
+
+            // 6) Wave progression
+            if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
+            if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
+
+            // Move enemy bullets down & remove off-screen
+            enemyBullets = enemyBullets.filter(b => { b.y += b.dy; return b.y < H; });
+        }
+
+        // ---- RENDER ----
+        function drawRect(e, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(e.x - e.w / 2, e.y - e.h / 2, e.w, e.h);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+            drawRect(player, 'lime');
+            enemies.forEach(e => drawRect(e, 'orange'));
+            bullets.forEach(b => drawRect(b, 'cyan'));
+            enemyBullets.forEach(b => drawRect(b, 'red'));
+        }
+
+        // ---- LOOP ----
+        let last = performance.now();
+        function loop(now) {
+            const dt = now - last; last = now;
+            update(dt, now);
+            draw();
+            document.getElementById('hud').textContent = `wave=${wave}  enemies=${enemies.length}  bullets=${bullets.length}  score=${score}`;
+            requestAnimationFrame(loop);
+        }
+
+        // ---- RESET/SPAWN ----
+        function reset() {
+            player = { x: W / 2, y: H - 40, w: 40, h: 20 };
+            bullets = [];
+            enemyBullets = [];
+            enemies = [];
+            score = 0; wave = 1; waveDone = false; shootTimer = 0;
+            spawnWave(wave);
+        }
+        function spawn() { spawnWave(wave); }
+
+        reset();
+        requestAnimationFrame(loop);
+    </script>
+
+    <div style="max-width:900px;margin:20px auto;text-align:left;background:#1a1a1a;padding:15px;border-radius:10px;">
+        <h3>update(dt, now) – What each part does</h3>
+        <pre>
+function update(dt, now) {
+  // move player
+  // shoot (with cooldown)
+  // move bullets
+  // move enemies + enemy shooting
+  // bullets vs enemies (collision)
+  // wave progression
+}
+</pre>
+        <ul>
+            <li><b>Player movement</b>: checks keys and updates <code>player.x</code>. Then clamps so you can't leave
+                the screen.</li>
+            <li><b>Shooting</b>: only fires if enough time passed since last shot (<code>now - shootTimer</code> &gt;
+                cooldown).</li>
+            <li><b>Bullets update</b>: each bullet moves by <code>dy</code>, and <code>filter</code> removes ones
+                off-screen.</li>
+            <li><b>Enemies</b>: each enemy moves down; randomly fires using <code>Math.random() &lt; shootRate</code>.
+            </li>
+            <li><b>Collision</b>: for each bullet, check against enemies using <code>hits</code>. On hit → remove enemy
+                (<code>splice</code>) and remove bullet (return <code>false</code>).</li>
+            <li><b>Wave progression</b>: when no enemies remain, wait a bit, then increase <code>wave</code> and call
+                <code>spawnWave</code>.</li>
+        </ul>
+
+        <p><b>Key idea:</b> <code>update</code> is the "brain" that runs every frame. It changes the game state;
+            <code>draw</code> just shows it.</p>
+
+        <p><b>Try:</b> Hold Space to see cooldown, clear all enemies to trigger next wave, and watch bullets being
+            removed by <code>filter</code>.</p>
+    </div>
+
+</body>
+
+</html>

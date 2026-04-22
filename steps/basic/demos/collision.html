@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Collision Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: sans-serif;
+            text-align: center;
+        }
+
+        canvas {
+            background: #000;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #333;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Collision (hits) Demo</h2>
+    <p>Move the green box with arrow keys. Touch the red box.</p>
+    <p id="status"></p>
+    <canvas id="c" width="600" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+
+        const player = { x: 100, y: 200, w: 50, h: 50 };
+        const enemy = { x: 350, y: 200, w: 80, h: 80 };
+
+        const keys = {};
+        document.addEventListener('keydown', e => keys[e.code] = true);
+        document.addEventListener('keyup', e => keys[e.code] = false);
+
+        function hits(a, b) {
+            return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+                Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+        }
+
+        function update() {
+            if (keys['ArrowLeft']) player.x -= 3;
+            if (keys['ArrowRight']) player.x += 3;
+            if (keys['ArrowUp']) player.y -= 3;
+            if (keys['ArrowDown']) player.y += 3;
+
+            const isColliding = hits(player, enemy);
+            document.getElementById('status').textContent = isColliding ? '💥 COLLISION!' : 'No collision';
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'green';
+            ctx.fillRect(player.x - player.w / 2, player.y - player.h / 2, player.w, player.h);
+
+            ctx.fillStyle = 'red';
+            ctx.fillRect(enemy.x - enemy.w / 2, enemy.y - enemy.h / 2, enemy.w, enemy.h);
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+
+    <div style="max-width:800px;margin:20px auto;text-align:left;background:#1a1a1a;padding:15px;border-radius:10px;">
+        <h3>hits(a, b) – Code + Explanation</h3>
+        <pre>
+function hits(a, b) {
+  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+         Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+}
+</pre>
+
+        <ul>
+            <li><b>a.x - b.x</b> → distance between centers on X axis</li>
+            <li><b>Math.abs()</b> → makes distance always positive</li>
+            <li><b>(a.w + b.w) / 2</b> → how far apart they can be before touching</li>
+            <li>Same logic for Y axis</li>
+            <li><b>&&</b> → BOTH X and Y must overlap → real collision</li>
+        </ul>
+
+        <p><b>Idea:</b> Treat objects as rectangles from their center. If they overlap on both axes → collision.</p>
+
+        <p><b>Try it:</b> Move the green box into the red one and watch when collision triggers.</p>
+    </div>
+
+</body>
+
+</html>

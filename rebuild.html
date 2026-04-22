@@ -2,10 +2,9 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>Sky Assault</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic</title>
     <style>
         *,
         *::before,
@@ -21,118 +20,27 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            height: 100dvh;
-            /* dynamic viewport height — accounts for iOS address bar */
             overflow: hidden;
             font-family: 'Courier New', monospace;
         }
 
         canvas {
             display: block;
-            touch-action: none;
         }
-
-        /* hand all touch events to JS */
     </style>
 </head>
 
 <body>
     <canvas id="game"></canvas>
+
     <script>
+        //canvas
+
         const canvas = document.getElementById('game');
-        //drawing context
         const ctx = canvas.getContext('2d');
-        //logical dimensions of the game world
         const W = canvas.width = 480;
         const H = canvas.height = 700;
-
-        //responsive scaling
-        function resizeCanvas() {
-            const scale = Math.mind(window.innerWidth / W, window.innerHeight / H);
-            canvas.style.width = W * scale + 'px';
-            canvas.style.height = H * scale + 'px';
-        }
-
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-
-        function toCanvas(clientX, clientY) {
-            const r = canvas.getBoundingClientRect();
-            return {
-                x: (clientX - r.left) * (W / r.width),
-                y: (clientY - r.top) * (H / r.height),
-            };
-        }
-
-        //state and enemy collection
-        let gameState = 'start'; 'start' | 'playing' | 'gameover';
-        let score = 0;
-        let hiscore = parseInt(localStorage.getItem('sky-assault-hi') || '0');
-        let wave = 1;
-        let lastTime = 0;
-        let shootTimer = 0;
-        let waveTimer = 0;
-        let waveDone = false;
-
-        //Entities are plain objects in arrays. A bullet is just { x, y, dx, dy, w, h }. An 
-        // enemy is { x, y, w, h, hp, type, ... }. There are no classes.
-
-        let player = null;
-        let bullets = [];   // player bullets
-        let enemyBullets = [];
-        let enemies = [];
-        let particles = [];
-        let powerUps = [];
-        let stars = [];
-
-        //constants (time is in ms as delta time from requestAnimationFrame)
-        const PLAYER_SPEED = 5;
-        const BULLET_SPEED = 11;
-        const ENEMY_BULLET_SPEED = 4;
-        const SHOOT_COOLDOWN = 180;   // ms between player shots
-        const WAVE_PAUSE = 2200;  // ms between waves
-
-
-        //input
-        const keys = {};
-        document.addEventListener('keydown', e => {
-            keys[e.code] = true;
-            getAudio();   // ensure AudioContext is created/resumed on first key press
-            if (e.code === 'Space') e.preventDefault();
-            if (e.code === 'KeyM') toggleMute();
-            if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') {
-                startGame();
-            }
-        });
-        document.addEventListener('keyup', e => { keys[e.code] = false; });
-
-
-        //touch controls
-        const touch = { active: false, x: W / 2, y: H - 80 };
-
-        canvas.addEventListener('touchstart', e => {
-            e.preventDefault();
-            getAudio();   // same gesture requirement as keyboard
-            const p = toCanvas(e.touches[0].clientX, e.touches[0].clientY);
-            touch.active = true;
-            touch.x = p.x;
-            touch.y = p.y;
-            if (gameState !== 'playing') startGame();
-        }, { passive: false });
-
-        canvas.addEventListener('touchmove', e => {
-            e.preventDefault();
-            const p = toCanvas(e.touches[0].clientX, e.touches[0].clientY);
-            touch.x = p.x;
-            touch.y = p.y;
-        }, { passive: false });
-
-        canvas.addEventListener('touchend', e => { e.preventDefault(); touch.active = false; }, { passive: false });
-        canvas.addEventListener('touchcancel', e => { e.preventDefault(); touch.active = false; }, { passive: false });
-
     </script>
 </body>
 
 </html>
-
-<!-- left at 5 entities/factories -->

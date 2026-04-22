@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sky Assault — Basic</title>
   <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
       background: #000;
       display: flex;
@@ -15,548 +23,553 @@
       overflow: hidden;
       font-family: 'Courier New', monospace;
     }
-    canvas { display: block; }
+
+    canvas {
+      display: block;
+    }
   </style>
 </head>
+
 <body>
-<canvas id="game"></canvas>
-<script>
+  <canvas id="game"></canvas>
+  <script>
 
-// ═══════════════════════════════════════
-//  CANVAS SETUP
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  CANVAS SETUP
+    // ═══════════════════════════════════════
 
-const canvas = document.getElementById('game');
-const ctx    = canvas.getContext('2d');
-const W = canvas.width  = 480;
-const H = canvas.height = 700;
-
-
-// ═══════════════════════════════════════
-//  AUDIO  (3 sounds — no music)
-// ═══════════════════════════════════════
-
-let audioCtx = null;
-
-function getAudio() {
-  if (!audioCtx) audioCtx = new AudioContext();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
-}
-
-function sndShoot() {
-  const ac = getAudio(), o = ac.createOscillator(), g = ac.createGain();
-  o.type = 'square';
-  o.frequency.setValueAtTime(900, ac.currentTime);
-  o.frequency.exponentialRampToValueAtTime(200, ac.currentTime + 0.09);
-  g.gain.setValueAtTime(0.15, ac.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.09);
-  o.connect(g); g.connect(ac.destination);
-  o.start(); o.stop(ac.currentTime + 0.09);
-}
-
-function sndExplosion() {
-  const ac  = getAudio();
-  const buf = ac.createBuffer(1, ac.sampleRate * 0.3, ac.sampleRate);
-  const d   = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  const src = ac.createBufferSource(), filt = ac.createBiquadFilter(), g = ac.createGain();
-  src.buffer = buf; filt.type = 'lowpass'; filt.frequency.value = 800;
-  g.gain.setValueAtTime(0.3, ac.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.3);
-  src.connect(filt); filt.connect(g); g.connect(ac.destination);
-  src.start(); src.stop(ac.currentTime + 0.3);
-}
-
-function sndGameOver() {
-  const ac = getAudio();
-  [440, 349, 294, 220].forEach((freq, i) => {
-    const o = ac.createOscillator(), g = ac.createGain();
-    const t = ac.currentTime + i * 0.22;
-    o.type = 'sawtooth'; o.frequency.value = freq;
-    g.gain.setValueAtTime(0.18, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
-    o.connect(g); g.connect(ac.destination);
-    o.start(t); o.stop(t + 0.32);
-  });
-}
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width = 480;
+    const H = canvas.height = 700;
 
 
-// ═══════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  AUDIO  (3 sounds — no music)
+    // ═══════════════════════════════════════
 
-const PLAYER_SPEED       = 5;
-const BULLET_SPEED       = 12;
-const ENEMY_BULLET_SPEED = 3.5;
-const SHOOT_COOLDOWN     = 200;   // ms
-const WAVE_PAUSE         = 2000;  // ms between waves
+    let audioCtx = null;
+
+    function getAudio() {
+      if (!audioCtx) audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function sndShoot() {
+      const ac = getAudio(), o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(900, ac.currentTime);
+      o.frequency.exponentialRampToValueAtTime(200, ac.currentTime + 0.09);
+      g.gain.setValueAtTime(0.15, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.09);
+      o.connect(g); g.connect(ac.destination);
+      o.start(); o.stop(ac.currentTime + 0.09);
+    }
+
+    function sndExplosion() {
+      const ac = getAudio();
+      const buf = ac.createBuffer(1, ac.sampleRate * 0.3, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = ac.createBufferSource(), filt = ac.createBiquadFilter(), g = ac.createGain();
+      src.buffer = buf; filt.type = 'lowpass'; filt.frequency.value = 800;
+      g.gain.setValueAtTime(0.3, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.3);
+      src.connect(filt); filt.connect(g); g.connect(ac.destination);
+      src.start(); src.stop(ac.currentTime + 0.3);
+    }
+
+    function sndGameOver() {
+      const ac = getAudio();
+      [440, 349, 294, 220].forEach((freq, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        const t = ac.currentTime + i * 0.22;
+        o.type = 'sawtooth'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.18, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+        o.connect(g); g.connect(ac.destination);
+        o.start(t); o.stop(t + 0.32);
+      });
+    }
 
 
-// ═══════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  CONSTANTS
+    // ═══════════════════════════════════════
 
-let gameState  = 'start';
-let score      = 0;
-let hiScore    = parseInt(localStorage.getItem('basic-hi') || '0');
-let wave       = 1;
-let lastTime   = 0;
-let shootTimer = 0;
-let waveTimer  = 0;
-let waveDone   = false;
-
-const keys = {};
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  getAudio();
-  if (e.code === 'Space') e.preventDefault();
-  if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') startGame();
-});
-document.addEventListener('keyup', e => { keys[e.code] = false; });
+    const PLAYER_SPEED = 5;
+    const BULLET_SPEED = 12;
+    const ENEMY_BULLET_SPEED = 3.5;
+    const SHOOT_COOLDOWN = 200;   // ms
+    const WAVE_PAUSE = 2000;  // ms between waves
 
 
-// ═══════════════════════════════════════
-//  ENTITY COLLECTIONS
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════
 
-let player       = null;
-let bullets      = [];
-let enemyBullets = [];
-let enemies      = [];
-let particles    = [];
-let stars        = [];
+    let gameState = 'start';
+    let score = 0;
+    let hiScore = parseInt(localStorage.getItem('basic-hi') || '0');
+    let wave = 1;
+    let lastTime = 0;
+    let shootTimer = 0;
+    let waveTimer = 0;
+    let waveDone = false;
 
-
-// ═══════════════════════════════════════
-//  STARS
-// ═══════════════════════════════════════
-
-function initStars() {
-  stars = [];
-  for (let i = 0; i < 100; i++) {
-    stars.push({
-      x:          Math.random() * W,
-      y:          Math.random() * H,
-      speed:      0.3 + Math.random() * 1.2,
-      size:       Math.random() < 0.85 ? 1 : 2,
-      brightness: 0.25 + Math.random() * 0.75,
+    const keys = {};
+    document.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      getAudio();
+      if (e.code === 'Space') e.preventDefault();
+      if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') startGame();
     });
-  }
-}
+    document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 
-// ═══════════════════════════════════════
-//  PLAYER
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  ENTITY COLLECTIONS
+    // ═══════════════════════════════════════
 
-function createPlayer() {
-  return { x: W / 2, y: H - 80, w: 36, h: 40, lives: 3, invincible: 0 };
-}
-
-
-// ═══════════════════════════════════════
-//  ENEMIES
-// ═══════════════════════════════════════
-
-function createEnemy(x, y) {
-  return { x, y, w: 32, h: 28, speed: 1.4 + wave * 0.1, shootRate: 0.0012 };
-}
+    let player = null;
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let particles = [];
+    let stars = [];
 
 
-// ═══════════════════════════════════════
-//  WAVE SPAWNING
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  STARS
+    // ═══════════════════════════════════════
 
-function spawnWave(waveNum) {
-  enemies  = [];
-  waveDone = false;
-  const rows    = Math.min(2 + Math.floor(waveNum / 3), 4);
-  const cols    = Math.min(4 + Math.floor(waveNum / 2), 8);
-  const spacing = Math.min((W - 60) / cols, 54);
-  const startX  = (W - (cols - 1) * spacing) / 2;
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      enemies.push(createEnemy(startX + col * spacing, -60 - row * 60));
+    function initStars() {
+      stars = [];
+      for (let i = 0; i < 100; i++) {
+        stars.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          speed: 0.3 + Math.random() * 1.2,
+          size: Math.random() < 0.85 ? 1 : 2,
+          brightness: 0.25 + Math.random() * 0.75,
+        });
+      }
     }
-  }
-}
 
 
-// ═══════════════════════════════════════
-//  START / RESTART
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  PLAYER
+    // ═══════════════════════════════════════
 
-function startGame() {
-  gameState    = 'playing';
-  score        = 0;
-  wave         = 1;
-  player       = createPlayer();
-  bullets      = [];
-  enemyBullets = [];
-  particles    = [];
-  waveDone     = false;
-  initStars();
-  spawnWave(wave);
-}
-
-
-// ═══════════════════════════════════════
-//  SHOOTING
-// ═══════════════════════════════════════
-
-function playerShoot(now) {
-  if (now - shootTimer < SHOOT_COOLDOWN) return;
-  shootTimer = now;
-  sndShoot();
-  bullets.push({ x: player.x, y: player.y - player.h / 2, dy: -BULLET_SPEED, w: 4, h: 12 });
-}
-
-
-// ═══════════════════════════════════════
-//  COLLISION  (AABB, center-based)
-// ═══════════════════════════════════════
-
-function hits(a, b) {
-  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
-         Math.abs(a.y - b.y) < (a.h + b.h) / 2;
-}
-
-
-// ═══════════════════════════════════════
-//  PARTICLES
-// ═══════════════════════════════════════
-
-function explode(x, y, color) {
-  for (let i = 0; i < 10; i++) {
-    const angle = (Math.PI * 2 * i) / 10 + Math.random() * 0.5;
-    const speed = 1 + Math.random() * 3;
-    particles.push({
-      x, y,
-      dx:    Math.cos(angle) * speed,
-      dy:    Math.sin(angle) * speed,
-      life:  1,
-      decay: 0.022 + Math.random() * 0.03,
-      size:  2 + Math.random() * 3,
-      color,
-    });
-  }
-}
-
-
-// ═══════════════════════════════════════
-//  HURT PLAYER
-// ═══════════════════════════════════════
-
-function hurtPlayer() {
-  if (player.invincible > 0) return;
-  player.lives--;
-  player.invincible = 2200;
-  explode(player.x, player.y, '#60a5fa');
-  if (player.lives <= 0) {
-    gameState = 'gameover';
-    if (score > hiScore) { hiScore = score; localStorage.setItem('basic-hi', hiScore); }
-    sndGameOver();
-  }
-}
-
-
-// ═══════════════════════════════════════
-//  UPDATE
-// ═══════════════════════════════════════
-
-function update(dt, now) {
-
-  // Stars
-  for (const s of stars) {
-    s.y += s.speed;
-    if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
-  }
-
-  // Player movement
-  if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
-  if (keys['ArrowRight']|| keys['KeyD']) player.x += PLAYER_SPEED;
-  if (keys['ArrowUp']   || keys['KeyW']) player.y -= PLAYER_SPEED;
-  if (keys['ArrowDown'] || keys['KeyS']) player.y += PLAYER_SPEED;
-  player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
-  player.y = Math.max(player.h / 2, Math.min(H - player.h / 2, player.y));
-
-  if (keys['Space']) playerShoot(now);
-  if (player.invincible > 0) player.invincible -= dt;
-
-  // Player bullets — move and remove when off-screen
-  bullets = bullets.filter(b => { b.y += b.dy; return b.y > -20; });
-
-  // Enemy bullets — move and remove when off-screen
-  enemyBullets = enemyBullets.filter(b => { b.y += b.dy; return b.y < H + 20; });
-
-  // Enemies — move down and occasionally shoot
-  for (const e of enemies) {
-    e.y += e.speed;
-    if (Math.random() < e.shootRate * (1 + wave * 0.1)) {
-      enemyBullets.push({ x: e.x, y: e.y + e.h / 2, dy: ENEMY_BULLET_SPEED, w: 5, h: 10 });
+    function createPlayer() {
+      return { x: W / 2, y: H - 80, w: 36, h: 40, lives: 3, invincible: 0 };
     }
-  }
 
-  // Collision: player bullets → enemies
-  bullets = bullets.filter(b => {
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      if (!hits(b, enemies[i])) continue;
-      score += 100;
-      explode(enemies[i].x, enemies[i].y, '#f87171');
-      sndExplosion();
-      enemies.splice(i, 1);
-      return false;
+
+    // ═══════════════════════════════════════
+    //  ENEMIES
+    // ═══════════════════════════════════════
+
+    function createEnemy(x, y) {
+      return { x, y, w: 32, h: 28, speed: 1.4 + wave * 0.1, shootRate: 0.0012 };
     }
-    return true;
-  });
 
-  // Collision: enemy bullets → player
-  enemyBullets = enemyBullets.filter(b => {
-    if (!hits(b, player)) return true;
-    hurtPlayer();
-    return false;
-  });
 
-  // Collision: enemies ramming player
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
-    if (e.y > H + 10) { enemies.splice(i, 1); continue; }
-    if (hits(player, e)) {
-      explode(e.x, e.y, '#f87171');
-      enemies.splice(i, 1);
-      hurtPlayer();
+    // ═══════════════════════════════════════
+    //  WAVE SPAWNING
+    // ═══════════════════════════════════════
+
+    function spawnWave(waveNum) {
+      enemies = [];
+      waveDone = false;
+      const rows = Math.min(2 + Math.floor(waveNum / 3), 4);
+      const cols = Math.min(4 + Math.floor(waveNum / 2), 8);
+      const spacing = Math.min((W - 60) / cols, 54);
+      const startX = (W - (cols - 1) * spacing) / 2;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          enemies.push(createEnemy(startX + col * spacing, -60 - row * 60));
+        }
+      }
     }
-  }
-
-  // Particles — move, apply friction, age out
-  particles = particles.filter(p => {
-    p.x += p.dx; p.y += p.dy;
-    p.dx *= 0.96; p.dy *= 0.96;
-    p.life -= p.decay;
-    return p.life > 0;
-  });
-
-  // Wave progression
-  if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
-  if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
-}
 
 
-// ═══════════════════════════════════════
-//  DRAW HELPERS
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  START / RESTART
+    // ═══════════════════════════════════════
 
-function drawShip(x, y, w, h, color) {
-  // Body
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x,       y - h / 2);
-  ctx.lineTo(x + w/2, y + h / 2);
-  ctx.lineTo(x - w/2, y + h / 2);
-  ctx.closePath();
-  ctx.fill();
-  // Engine glow
-  ctx.fillStyle   = '#facc15';
-  ctx.shadowColor = '#facc15';
-  ctx.shadowBlur  = 10;
-  ctx.beginPath();
-  ctx.ellipse(x, y + h / 2, w / 7, 7, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur  = 0;
-  // Cockpit
-  ctx.fillStyle = 'rgba(190,235,255,0.75)';
-  ctx.beginPath();
-  ctx.ellipse(x, y - h / 6, w / 5, h / 5, 0, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-
-// ═══════════════════════════════════════
-//  DRAW
-// ═══════════════════════════════════════
-
-function draw(now) {
-
-  // Background
-  ctx.fillStyle = '#060616';
-  ctx.fillRect(0, 0, W, H);
-
-  // Stars (drawn on all screens)
-  for (const s of stars) {
-    ctx.globalAlpha = s.brightness;
-    ctx.fillStyle   = '#fff';
-    ctx.fillRect(s.x, s.y, s.size, s.size);
-  }
-  ctx.globalAlpha = 1;
-
-  // ── Start screen ─────────────────────
-  if (gameState === 'start') {
-    drawShip(W / 2, H / 2 - 30, 52, 60, '#60a5fa');
-    ctx.fillStyle    = '#60a5fa';
-    ctx.font         = 'bold 44px Courier New';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor  = '#60a5fa';
-    ctx.shadowBlur   = 20;
-    ctx.fillText('SKY ASSAULT', W / 2, H / 2 - 120);
-    ctx.shadowBlur   = 0;
-    ctx.fillStyle    = '#c4c4e0';
-    ctx.font         = '15px Courier New';
-    ctx.fillText('MOVE :  Arrow Keys / WASD', W / 2, H / 2 + 55);
-    ctx.fillText('SHOOT:  Space',             W / 2, H / 2 + 79);
-    if (Math.floor(now / 600) % 2) {
-      ctx.fillStyle = '#facc15';
-      ctx.font      = 'bold 17px Courier New';
-      ctx.fillText('PRESS SPACE TO START', W / 2, H / 2 + 122);
+    function startGame() {
+      gameState = 'playing';
+      score = 0;
+      wave = 1;
+      player = createPlayer();
+      bullets = [];
+      enemyBullets = [];
+      particles = [];
+      waveDone = false;
+      initStars();
+      spawnWave(wave);
     }
-    ctx.fillStyle = '#666688';
-    ctx.font      = '12px Courier New';
-    ctx.fillText(`HI SCORE: ${hiScore}`, W / 2, H / 2 + 158);
-    return;
-  }
 
-  // ── Game over screen ──────────────────
-  if (gameState === 'gameover') {
-    // Particles finish playing out
-    for (const p of particles) {
-      ctx.globalAlpha = p.life;
-      ctx.fillStyle   = p.color;
+
+    // ═══════════════════════════════════════
+    //  SHOOTING
+    // ═══════════════════════════════════════
+
+    function playerShoot(now) {
+      if (now - shootTimer < SHOOT_COOLDOWN) return;
+      shootTimer = now;
+      sndShoot();
+      bullets.push({ x: player.x, y: player.y - player.h / 2, dy: -BULLET_SPEED, w: 4, h: 12 });
+    }
+
+
+    // ═══════════════════════════════════════
+    //  COLLISION  (AABB, center-based)
+    // ═══════════════════════════════════════
+
+    function hits(a, b) {
+      return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+        Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+    }
+
+
+    // ═══════════════════════════════════════
+    //  PARTICLES
+    // ═══════════════════════════════════════
+
+    function explode(x, y, color) {
+      for (let i = 0; i < 10; i++) {
+        const angle = (Math.PI * 2 * i) / 10 + Math.random() * 0.5;
+        const speed = 1 + Math.random() * 3;
+        particles.push({
+          x, y,
+          dx: Math.cos(angle) * speed,
+          dy: Math.sin(angle) * speed,
+          life: 1,
+          decay: 0.022 + Math.random() * 0.03,
+          size: 2 + Math.random() * 3,
+          color,
+        });
+      }
+    }
+
+
+    // ═══════════════════════════════════════
+    //  HURT PLAYER
+    // ═══════════════════════════════════════
+
+    function hurtPlayer() {
+      if (player.invincible > 0) return;
+      player.lives--;
+      player.invincible = 2200;
+      explode(player.x, player.y, '#60a5fa');
+      if (player.lives <= 0) {
+        gameState = 'gameover';
+        if (score > hiScore) { hiScore = score; localStorage.setItem('basic-hi', hiScore); }
+        sndGameOver();
+      }
+    }
+
+
+    // ═══════════════════════════════════════
+    //  UPDATE
+    // ═══════════════════════════════════════
+
+    function update(dt, now) {
+
+      // Stars
+      for (const s of stars) {
+        s.y += s.speed;
+        if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+      }
+
+      // Player movement
+      if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
+      if (keys['ArrowRight'] || keys['KeyD']) player.x += PLAYER_SPEED;
+      if (keys['ArrowUp'] || keys['KeyW']) player.y -= PLAYER_SPEED;
+      if (keys['ArrowDown'] || keys['KeyS']) player.y += PLAYER_SPEED;
+      player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+      player.y = Math.max(player.h / 2, Math.min(H - player.h / 2, player.y));
+
+      if (keys['Space']) playerShoot(now);
+      if (player.invincible > 0) player.invincible -= dt;
+
+      // Player bullets — move and remove when off-screen
+      bullets = bullets.filter(b => { b.y += b.dy; return b.y > -20; });
+
+      // Enemy bullets — move and remove when off-screen
+      enemyBullets = enemyBullets.filter(b => { b.y += b.dy; return b.y < H + 20; });
+
+      // Enemies — move down and occasionally shoot
+      for (const e of enemies) {
+        e.y += e.speed;
+        if (Math.random() < e.shootRate * (1 + wave * 0.1)) {
+          enemyBullets.push({ x: e.x, y: e.y + e.h / 2, dy: ENEMY_BULLET_SPEED, w: 5, h: 10 });
+        }
+      }
+
+      // Collision: player bullets → enemies
+      bullets = bullets.filter(b => {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          if (!hits(b, enemies[i])) continue;
+          score += 100;
+          explode(enemies[i].x, enemies[i].y, '#f87171');
+          sndExplosion();
+          enemies.splice(i, 1);
+          return false;
+        }
+        return true;
+      });
+
+      // Collision: enemy bullets → player
+      enemyBullets = enemyBullets.filter(b => {
+        if (!hits(b, player)) return true;
+        hurtPlayer();
+        return false;
+      });
+
+      // Collision: enemies ramming player
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        if (e.y > H + 10) { enemies.splice(i, 1); continue; }
+        if (hits(player, e)) {
+          explode(e.x, e.y, '#f87171');
+          enemies.splice(i, 1);
+          hurtPlayer();
+        }
+      }
+
+      // Particles — move, apply friction, age out
+      particles = particles.filter(p => {
+        p.x += p.dx; p.y += p.dy;
+        p.dx *= 0.96; p.dy *= 0.96;
+        p.life -= p.decay;
+        return p.life > 0;
+      });
+
+      // Wave progression
+      if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
+      if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
+    }
+
+
+    // ═══════════════════════════════════════
+    //  DRAW HELPERS
+    // ═══════════════════════════════════════
+
+    function drawShip(x, y, w, h, color) {
+      // Body
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.moveTo(x, y - h / 2);
+      ctx.lineTo(x + w / 2, y + h / 2);
+      ctx.lineTo(x - w / 2, y + h / 2);
+      ctx.closePath();
+      ctx.fill();
+      // Engine glow
+      ctx.fillStyle = '#facc15';
+      ctx.shadowColor = '#facc15';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(x, y + h / 2, w / 7, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Cockpit
+      ctx.fillStyle = 'rgba(190,235,255,0.75)';
+      ctx.beginPath();
+      ctx.ellipse(x, y - h / 6, w / 5, h / 5, 0, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha  = 1;
-    ctx.fillStyle    = '#f43f5e';
-    ctx.font         = 'bold 50px Courier New';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor  = '#f43f5e';
-    ctx.shadowBlur   = 22;
-    ctx.fillText('GAME OVER', W / 2, H / 2 - 70);
-    ctx.shadowBlur   = 0;
-    ctx.fillStyle    = '#c4c4e0';
-    ctx.font         = '20px Courier New';
-    ctx.fillText(`SCORE : ${score}`, W / 2, H / 2);
-    ctx.fillText(`WAVE  : ${wave}`,  W / 2, H / 2 + 34);
-    if (score >= hiScore && score > 0) {
+
+
+    // ═══════════════════════════════════════
+    //  DRAW
+    // ═══════════════════════════════════════
+
+    function draw(now) {
+
+      // Background
+      ctx.fillStyle = '#060616';
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars (drawn on all screens)
+      for (const s of stars) {
+        ctx.globalAlpha = s.brightness;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+      }
+      ctx.globalAlpha = 1;
+
+      // ── Start screen ─────────────────────
+      if (gameState === 'start') {
+        drawShip(W / 2, H / 2 - 30, 52, 60, '#60a5fa');
+        ctx.fillStyle = '#60a5fa';
+        ctx.font = 'bold 44px Courier New';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = '#60a5fa';
+        ctx.shadowBlur = 20;
+        ctx.fillText('SKY ASSAULT', W / 2, H / 2 - 120);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#c4c4e0';
+        ctx.font = '15px Courier New';
+        ctx.fillText('MOVE :  Arrow Keys / WASD', W / 2, H / 2 + 55);
+        ctx.fillText('SHOOT:  Space', W / 2, H / 2 + 79);
+        if (Math.floor(now / 600) % 2) {
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 17px Courier New';
+          ctx.fillText('PRESS SPACE TO START', W / 2, H / 2 + 122);
+        }
+        ctx.fillStyle = '#666688';
+        ctx.font = '12px Courier New';
+        ctx.fillText(`HI SCORE: ${hiScore}`, W / 2, H / 2 + 158);
+        return;
+      }
+
+      // ── Game over screen ──────────────────
+      if (gameState === 'gameover') {
+        // Particles finish playing out
+        for (const p of particles) {
+          ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 50px Courier New';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = '#f43f5e';
+        ctx.shadowBlur = 22;
+        ctx.fillText('GAME OVER', W / 2, H / 2 - 70);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#c4c4e0';
+        ctx.font = '20px Courier New';
+        ctx.fillText(`SCORE : ${score}`, W / 2, H / 2);
+        ctx.fillText(`WAVE  : ${wave}`, W / 2, H / 2 + 34);
+        if (score >= hiScore && score > 0) {
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 15px Courier New';
+          ctx.fillText('NEW HIGH SCORE!', W / 2, H / 2 + 72);
+        }
+        if (Math.floor(now / 600) % 2) {
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 15px Courier New';
+          ctx.fillText('PRESS SPACE TO PLAY AGAIN', W / 2, H / 2 + 115);
+        }
+        return;
+      }
+
+      // ── Playing ───────────────────────────
+
+      // Player (blink every 100ms while invincible)
+      if (player.invincible <= 0 || Math.floor(now / 100) % 2 === 0) {
+        drawShip(player.x, player.y, player.w, player.h, '#60a5fa');
+      }
+
+      // Player bullets
+      ctx.shadowColor = '#facc15';
+      ctx.shadowBlur = 8;
       ctx.fillStyle = '#facc15';
-      ctx.font      = 'bold 15px Courier New';
-      ctx.fillText('NEW HIGH SCORE!', W / 2, H / 2 + 72);
+      for (const b of bullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+      ctx.shadowBlur = 0;
+
+      // Enemy bullets
+      ctx.shadowColor = '#f43f5e';
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = '#f87171';
+      for (const b of enemyBullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+      ctx.shadowBlur = 0;
+
+      // Enemies — inverted triangle with glow
+      for (const e of enemies) {
+        ctx.fillStyle = '#f87171';
+        ctx.shadowColor = '#f87171';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y + e.h / 2);
+        ctx.lineTo(e.x + e.w / 2, e.y - e.h / 2);
+        ctx.lineTo(e.x - e.w / 2, e.y - e.h / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(e.x, e.y - 2, e.w / 5, e.h / 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Particles
+      for (const p of particles) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // HUD
+      ctx.font = 'bold 13px Courier New';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#c4c4e0';
+      ctx.textAlign = 'left';
+      ctx.fillText(`SCORE  ${score}`, 12, 12);
+      ctx.textAlign = 'center';
+      ctx.fillText(`WAVE ${wave}`, W / 2, 12);
+      ctx.textAlign = 'right';
+      ctx.fillText(`HI  ${hiScore}`, W - 12, 12);
+
+      // Lives as mini ships
+      for (let i = 0; i < player.lives; i++) {
+        drawShip(18 + i * 30, H - 22, 16, 18, '#60a5fa');
+      }
+
+      // Wave-clear banner
+      if (waveDone) {
+        const elapsed = now - waveTimer;
+        const alpha = Math.min(1, elapsed / 300) * (1 - elapsed / WAVE_PAUSE);
+        if (alpha > 0) {
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 34px Courier New';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#facc15';
+          ctx.shadowBlur = 16;
+          ctx.fillText('WAVE CLEAR!', W / 2, H / 2);
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = 1;
+        }
+      }
     }
-    if (Math.floor(now / 600) % 2) {
-      ctx.fillStyle = '#facc15';
-      ctx.font      = 'bold 15px Courier New';
-      ctx.fillText('PRESS SPACE TO PLAY AGAIN', W / 2, H / 2 + 115);
+
+
+    // ═══════════════════════════════════════
+    //  GAME LOOP
+    // ═══════════════════════════════════════
+
+    function loop(now) {
+      const dt = Math.min(now - lastTime, 50);
+      lastTime = now;
+      if (gameState === 'playing') update(dt, now);
+      draw(now);
+      requestAnimationFrame(loop);
     }
-    return;
-  }
-
-  // ── Playing ───────────────────────────
-
-  // Player (blink every 100ms while invincible)
-  if (player.invincible <= 0 || Math.floor(now / 100) % 2 === 0) {
-    drawShip(player.x, player.y, player.w, player.h, '#60a5fa');
-  }
-
-  // Player bullets
-  ctx.shadowColor = '#facc15';
-  ctx.shadowBlur  = 8;
-  ctx.fillStyle   = '#facc15';
-  for (const b of bullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-  ctx.shadowBlur  = 0;
-
-  // Enemy bullets
-  ctx.shadowColor = '#f43f5e';
-  ctx.shadowBlur  = 6;
-  ctx.fillStyle   = '#f87171';
-  for (const b of enemyBullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-  ctx.shadowBlur  = 0;
-
-  // Enemies — inverted triangle with glow
-  for (const e of enemies) {
-    ctx.fillStyle   = '#f87171';
-    ctx.shadowColor = '#f87171';
-    ctx.shadowBlur  = 8;
-    ctx.beginPath();
-    ctx.moveTo(e.x,         e.y + e.h / 2);
-    ctx.lineTo(e.x + e.w/2, e.y - e.h / 2);
-    ctx.lineTo(e.x - e.w/2, e.y - e.h / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur  = 0;
-    ctx.fillStyle   = 'rgba(0,0,0,0.4)';
-    ctx.beginPath();
-    ctx.ellipse(e.x, e.y - 2, e.w / 5, e.h / 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Particles
-  for (const p of particles) {
-    ctx.globalAlpha = p.life;
-    ctx.fillStyle   = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // HUD
-  ctx.font         = 'bold 13px Courier New';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle    = '#c4c4e0';
-  ctx.textAlign    = 'left';
-  ctx.fillText(`SCORE  ${score}`, 12, 12);
-  ctx.textAlign    = 'center';
-  ctx.fillText(`WAVE ${wave}`, W / 2, 12);
-  ctx.textAlign    = 'right';
-  ctx.fillText(`HI  ${hiScore}`, W - 12, 12);
-
-  // Lives as mini ships
-  for (let i = 0; i < player.lives; i++) {
-    drawShip(18 + i * 30, H - 22, 16, 18, '#60a5fa');
-  }
-
-  // Wave-clear banner
-  if (waveDone) {
-    const elapsed = now - waveTimer;
-    const alpha   = Math.min(1, elapsed / 300) * (1 - elapsed / WAVE_PAUSE);
-    if (alpha > 0) {
-      ctx.globalAlpha  = alpha;
-      ctx.fillStyle    = '#facc15';
-      ctx.font         = 'bold 34px Courier New';
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor  = '#facc15';
-      ctx.shadowBlur   = 16;
-      ctx.fillText('WAVE CLEAR!', W / 2, H / 2);
-      ctx.shadowBlur   = 0;
-      ctx.globalAlpha  = 1;
-    }
-  }
-}
 
 
-// ═══════════════════════════════════════
-//  GAME LOOP
-// ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  BOOT
+    // ═══════════════════════════════════════
 
-function loop(now) {
-  const dt = Math.min(now - lastTime, 50);
-  lastTime = now;
-  if (gameState === 'playing') update(dt, now);
-  draw(now);
-  requestAnimationFrame(loop);
-}
+    initStars();
+    requestAnimationFrame(loop);
 
-
-// ═══════════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════════
-
-initStars();
-requestAnimationFrame(loop);
-
-</script>
+  </script>
 </body>
+
 </html>

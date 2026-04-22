@@ -1,275 +1,289 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Sky Assault — Minimal</title>
   <style>
-    body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-    canvas { display: block; background: #060616; }
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    canvas {
+      display: block;
+      background: #060616;
+    }
   </style>
 </head>
+
 <body>
-<canvas id="game"></canvas>
-<script>
+  <canvas id="game"></canvas>
+  <script>
 
-// ── 1. CANVAS SETUP ──────────────────────────────────────────
-const canvas = document.getElementById('game');
-const ctx    = canvas.getContext('2d');
-const W = canvas.width  = 480;
-const H = canvas.height = 700;
-
-
-// ── 2. CONSTANTS ─────────────────────────────────────────────
-const PLAYER_SPEED   = 5;
-const BULLET_SPEED   = 10;
-const SHOOT_COOLDOWN = 300;   // ms between shots
-const WAVE_PAUSE     = 1800;  // ms between waves
+    // ── 1. CANVAS SETUP ──────────────────────────────────────────
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width = 480;
+    const H = canvas.height = 700;
 
 
-// ── 3. STATE ─────────────────────────────────────────────────
-let gameState  = 'start';   // 'start' | 'playing' | 'gameover'
-let score      = 0;
-let hiScore    = parseInt(localStorage.getItem('min-hi') || '0');
-let wave       = 1;
-let lastTime   = 0;
-let shootTimer = 0;
-let waveTimer  = 0;
-let waveDone   = false;
-
-let player       = null;
-let bullets      = [];
-let enemyBullets = [];
-let enemies      = [];
+    // ── 2. CONSTANTS ─────────────────────────────────────────────
+    const PLAYER_SPEED = 5;
+    const BULLET_SPEED = 10;
+    const SHOOT_COOLDOWN = 300;   // ms between shots
+    const WAVE_PAUSE = 1800;  // ms between waves
 
 
-// ── 4. INPUT ─────────────────────────────────────────────────
-const keys = {};
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'Space') e.preventDefault();
-  if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') startGame();
-});
-document.addEventListener('keyup', e => { keys[e.code] = false; });
+    // ── 3. STATE ─────────────────────────────────────────────────
+    let gameState = 'start';   // 'start' | 'playing' | 'gameover'
+    let score = 0;
+    let hiScore = parseInt(localStorage.getItem('min-hi') || '0');
+    let wave = 1;
+    let lastTime = 0;
+    let shootTimer = 0;
+    let waveTimer = 0;
+    let waveDone = false;
+
+    let player = null;
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
 
 
-// ── 5. FACTORIES ─────────────────────────────────────────────
-function createPlayer() {
-  return { x: W / 2, y: H - 60, w: 30, h: 20, lives: 3, invincible: 0 };
-}
+    // ── 4. INPUT ─────────────────────────────────────────────────
+    const keys = {};
+    document.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (e.code === 'Space') e.preventDefault();
+      if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') startGame();
+    });
+    document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-function createEnemy(x, y) {
-  return { x, y, w: 28, h: 20, speed: 0.8 + wave * 0.1, shootRate: 0.0008 };
-}
 
-
-// ── 6. WAVE SPAWNING ─────────────────────────────────────────
-function spawnWave(n) {
-  enemies  = [];
-  waveDone = false;
-  const cols    = Math.min(4 + n, 9);
-  const rows    = Math.min(1 + Math.floor(n / 2), 4);
-  const spacing = Math.floor((W - 60) / cols);
-  const startX  = (W - (cols - 1) * spacing) / 2;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      enemies.push(createEnemy(startX + c * spacing, -40 - r * 50));
+    // ── 5. FACTORIES ─────────────────────────────────────────────
+    function createPlayer() {
+      return { x: W / 2, y: H - 60, w: 30, h: 20, lives: 3, invincible: 0 };
     }
-  }
-}
 
-
-// ── 7. START / RESTART ───────────────────────────────────────
-function startGame() {
-  gameState    = 'playing';
-  score        = 0;
-  wave         = 1;
-  player       = createPlayer();
-  bullets      = [];
-  enemyBullets = [];
-  waveDone     = false;
-  spawnWave(wave);
-}
-
-
-// ── 8. COLLISION ─────────────────────────────────────────────
-// All positions are center-based (x, y = center of the rectangle)
-function hits(a, b) {
-  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
-         Math.abs(a.y - b.y) < (a.h + b.h) / 2;
-}
-
-
-// ── 9. HURT PLAYER ───────────────────────────────────────────
-function hurtPlayer() {
-  if (player.invincible > 0) return;
-  player.lives--;
-  player.invincible = 2000;
-  if (player.lives <= 0) {
-    gameState = 'gameover';
-    if (score > hiScore) { hiScore = score; localStorage.setItem('min-hi', hiScore); }
-  }
-}
-
-
-// ── 10. UPDATE ───────────────────────────────────────────────
-function update(dt, now) {
-
-  // Move player left/right, clamp to canvas
-  if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
-  if (keys['ArrowRight']|| keys['KeyD']) player.x += PLAYER_SPEED;
-  player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
-  if (player.invincible > 0) player.invincible -= dt;
-
-  // Shoot
-  if (keys['Space'] && now - shootTimer > SHOOT_COOLDOWN) {
-    shootTimer = now;
-    bullets.push({ x: player.x, y: player.y - player.h / 2, w: 4, h: 12, dy: -BULLET_SPEED });
-  }
-
-  // Move player bullets; remove when off-screen
-  bullets = bullets.filter(b => { b.y += b.dy; return b.y > 0; });
-
-  // Move enemy bullets; remove when off-screen
-  enemyBullets = enemyBullets.filter(b => { b.y += b.dy; return b.y < H; });
-
-  // Move enemies; let them shoot occasionally
-  for (const e of enemies) {
-    e.y += e.speed;
-    if (Math.random() < e.shootRate) {
-      enemyBullets.push({ x: e.x, y: e.y + e.h / 2, w: 4, h: 10, dy: 3 + wave * 0.2 });
+    function createEnemy(x, y) {
+      return { x, y, w: 28, h: 20, speed: 0.8 + wave * 0.1, shootRate: 0.0008 };
     }
-  }
 
-  // Player bullets vs enemies
-  bullets = bullets.filter(b => {
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      if (!hits(b, enemies[i])) continue;
-      score += 100;
-      enemies.splice(i, 1);
-      return false;   // bullet is consumed
+
+    // ── 6. WAVE SPAWNING ─────────────────────────────────────────
+    function spawnWave(n) {
+      enemies = [];
+      waveDone = false;
+      const cols = Math.min(4 + n, 9);
+      const rows = Math.min(1 + Math.floor(n / 2), 4);
+      const spacing = Math.floor((W - 60) / cols);
+      const startX = (W - (cols - 1) * spacing) / 2;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          enemies.push(createEnemy(startX + c * spacing, -40 - r * 50));
+        }
+      }
     }
-    return true;
-  });
-
-  // Enemy bullets vs player
-  enemyBullets = enemyBullets.filter(b => {
-    if (!hits(b, player)) return true;
-    hurtPlayer();
-    return false;
-  });
-
-  // Enemies ramming player or leaving canvas
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
-    if (e.y > H + 10) { enemies.splice(i, 1); continue; }
-    if (hits(player, e)) { enemies.splice(i, 1); hurtPlayer(); }
-  }
-
-  // Wave progression
-  if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
-  if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
-}
 
 
-// ── 11. DRAW ─────────────────────────────────────────────────
-function draw(now) {
-
-  ctx.fillStyle = '#060616';
-  ctx.fillRect(0, 0, W, H);
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Start screen
-  if (gameState === 'start') {
-    ctx.fillStyle = '#60a5fa';
-    ctx.font      = 'bold 40px monospace';
-    ctx.fillText('SKY ASSAULT', W / 2, H / 2 - 60);
-    ctx.fillStyle = '#aaa';
-    ctx.font      = '15px monospace';
-    ctx.fillText('A / D  or  Arrow Keys  to move', W / 2, H / 2 + 10);
-    ctx.fillText('Space to shoot', W / 2, H / 2 + 35);
-    if (Math.floor(now / 600) % 2) {
-      ctx.fillStyle = '#facc15';
-      ctx.fillText('PRESS SPACE TO START', W / 2, H / 2 + 80);
+    // ── 7. START / RESTART ───────────────────────────────────────
+    function startGame() {
+      gameState = 'playing';
+      score = 0;
+      wave = 1;
+      player = createPlayer();
+      bullets = [];
+      enemyBullets = [];
+      waveDone = false;
+      spawnWave(wave);
     }
-    return;
-  }
 
-  // Game over screen
-  if (gameState === 'gameover') {
-    ctx.fillStyle = '#f43f5e';
-    ctx.font      = 'bold 48px monospace';
-    ctx.fillText('GAME OVER', W / 2, H / 2 - 60);
-    ctx.fillStyle = '#ccc';
-    ctx.font      = '20px monospace';
-    ctx.fillText('Score: ' + score, W / 2, H / 2);
-    ctx.fillText('Wave:  ' + wave,  W / 2, H / 2 + 34);
-    if (Math.floor(now / 600) % 2) {
-      ctx.fillStyle = '#facc15';
-      ctx.font      = '16px monospace';
-      ctx.fillText('PRESS SPACE TO PLAY AGAIN', W / 2, H / 2 + 80);
+
+    // ── 8. COLLISION ─────────────────────────────────────────────
+    // All positions are center-based (x, y = center of the rectangle)
+    function hits(a, b) {
+      return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+        Math.abs(a.y - b.y) < (a.h + b.h) / 2;
     }
-    return;
-  }
 
-  // Player (blink while invincible)
-  if (player.invincible <= 0 || Math.floor(now / 120) % 2 === 0) {
-    ctx.fillStyle = '#60a5fa';
-    ctx.fillRect(player.x - player.w / 2, player.y - player.h / 2, player.w, player.h);
-  }
 
-  // Player bullets
-  ctx.fillStyle = '#facc15';
-  for (const b of bullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    // ── 9. HURT PLAYER ───────────────────────────────────────────
+    function hurtPlayer() {
+      if (player.invincible > 0) return;
+      player.lives--;
+      player.invincible = 2000;
+      if (player.lives <= 0) {
+        gameState = 'gameover';
+        if (score > hiScore) { hiScore = score; localStorage.setItem('min-hi', hiScore); }
+      }
+    }
 
-  // Enemy bullets
-  ctx.fillStyle = '#f87171';
-  for (const b of enemyBullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
 
-  // Enemies
-  ctx.fillStyle = '#f87171';
-  for (const e of enemies) ctx.fillRect(e.x - e.w / 2, e.y - e.h / 2, e.w, e.h);
+    // ── 10. UPDATE ───────────────────────────────────────────────
+    function update(dt, now) {
 
-  // HUD
-  ctx.font         = 'bold 13px monospace';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle    = '#ccc';
-  ctx.textAlign    = 'left';  ctx.fillText('SCORE ' + score,   12,      12);
-  ctx.textAlign    = 'center';ctx.fillText('WAVE '  + wave,    W / 2,   12);
-  ctx.textAlign    = 'right'; ctx.fillText('HI '    + hiScore, W - 12,  12);
+      // Move player left/right, clamp to canvas
+      if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
+      if (keys['ArrowRight'] || keys['KeyD']) player.x += PLAYER_SPEED;
+      player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+      if (player.invincible > 0) player.invincible -= dt;
 
-  // Lives (small squares)
-  ctx.fillStyle = '#60a5fa';
-  for (let i = 0; i < player.lives; i++) ctx.fillRect(12 + i * 18, H - 22, 12, 12);
+      // Shoot
+      if (keys['Space'] && now - shootTimer > SHOOT_COOLDOWN) {
+        shootTimer = now;
+        bullets.push({ x: player.x, y: player.y - player.h / 2, w: 4, h: 12, dy: -BULLET_SPEED });
+      }
 
-  // Wave-clear banner
-  if (waveDone) {
-    const t = now - waveTimer;
-    const a = Math.min(1, t / 300) * (1 - t / WAVE_PAUSE);
-    if (a > 0) {
-      ctx.globalAlpha  = a;
-      ctx.fillStyle    = '#facc15';
-      ctx.font         = 'bold 34px monospace';
-      ctx.textAlign    = 'center';
+      // Move player bullets; remove when off-screen
+      bullets = bullets.filter(b => { b.y += b.dy; return b.y > 0; });
+
+      // Move enemy bullets; remove when off-screen
+      enemyBullets = enemyBullets.filter(b => { b.y += b.dy; return b.y < H; });
+
+      // Move enemies; let them shoot occasionally
+      for (const e of enemies) {
+        e.y += e.speed;
+        if (Math.random() < e.shootRate) {
+          enemyBullets.push({ x: e.x, y: e.y + e.h / 2, w: 4, h: 10, dy: 3 + wave * 0.2 });
+        }
+      }
+
+      // Player bullets vs enemies
+      bullets = bullets.filter(b => {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          if (!hits(b, enemies[i])) continue;
+          score += 100;
+          enemies.splice(i, 1);
+          return false;   // bullet is consumed
+        }
+        return true;
+      });
+
+      // Enemy bullets vs player
+      enemyBullets = enemyBullets.filter(b => {
+        if (!hits(b, player)) return true;
+        hurtPlayer();
+        return false;
+      });
+
+      // Enemies ramming player or leaving canvas
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        if (e.y > H + 10) { enemies.splice(i, 1); continue; }
+        if (hits(player, e)) { enemies.splice(i, 1); hurtPlayer(); }
+      }
+
+      // Wave progression
+      if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
+      if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
+    }
+
+
+    // ── 11. DRAW ─────────────────────────────────────────────────
+    function draw(now) {
+
+      ctx.fillStyle = '#060616';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('WAVE CLEAR!', W / 2, H / 2);
-      ctx.globalAlpha  = 1;
+
+      // Start screen
+      if (gameState === 'start') {
+        ctx.fillStyle = '#60a5fa';
+        ctx.font = 'bold 40px monospace';
+        ctx.fillText('SKY ASSAULT', W / 2, H / 2 - 60);
+        ctx.fillStyle = '#aaa';
+        ctx.font = '15px monospace';
+        ctx.fillText('A / D  or  Arrow Keys  to move', W / 2, H / 2 + 10);
+        ctx.fillText('Space to shoot', W / 2, H / 2 + 35);
+        if (Math.floor(now / 600) % 2) {
+          ctx.fillStyle = '#facc15';
+          ctx.fillText('PRESS SPACE TO START', W / 2, H / 2 + 80);
+        }
+        return;
+      }
+
+      // Game over screen
+      if (gameState === 'gameover') {
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 48px monospace';
+        ctx.fillText('GAME OVER', W / 2, H / 2 - 60);
+        ctx.fillStyle = '#ccc';
+        ctx.font = '20px monospace';
+        ctx.fillText('Score: ' + score, W / 2, H / 2);
+        ctx.fillText('Wave:  ' + wave, W / 2, H / 2 + 34);
+        if (Math.floor(now / 600) % 2) {
+          ctx.fillStyle = '#facc15';
+          ctx.font = '16px monospace';
+          ctx.fillText('PRESS SPACE TO PLAY AGAIN', W / 2, H / 2 + 80);
+        }
+        return;
+      }
+
+      // Player (blink while invincible)
+      if (player.invincible <= 0 || Math.floor(now / 120) % 2 === 0) {
+        ctx.fillStyle = '#60a5fa';
+        ctx.fillRect(player.x - player.w / 2, player.y - player.h / 2, player.w, player.h);
+      }
+
+      // Player bullets
+      ctx.fillStyle = '#facc15';
+      for (const b of bullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+
+      // Enemy bullets
+      ctx.fillStyle = '#f87171';
+      for (const b of enemyBullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+
+      // Enemies
+      ctx.fillStyle = '#f87171';
+      for (const e of enemies) ctx.fillRect(e.x - e.w / 2, e.y - e.h / 2, e.w, e.h);
+
+      // HUD
+      ctx.font = 'bold 13px monospace';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#ccc';
+      ctx.textAlign = 'left'; ctx.fillText('SCORE ' + score, 12, 12);
+      ctx.textAlign = 'center'; ctx.fillText('WAVE ' + wave, W / 2, 12);
+      ctx.textAlign = 'right'; ctx.fillText('HI ' + hiScore, W - 12, 12);
+
+      // Lives (small squares)
+      ctx.fillStyle = '#60a5fa';
+      for (let i = 0; i < player.lives; i++) ctx.fillRect(12 + i * 18, H - 22, 12, 12);
+
+      // Wave-clear banner
+      if (waveDone) {
+        const t = now - waveTimer;
+        const a = Math.min(1, t / 300) * (1 - t / WAVE_PAUSE);
+        if (a > 0) {
+          ctx.globalAlpha = a;
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 34px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('WAVE CLEAR!', W / 2, H / 2);
+          ctx.globalAlpha = 1;
+        }
+      }
     }
-  }
-}
 
 
-// ── 12. GAME LOOP ─────────────────────────────────────────────
-function loop(now) {
-  const dt = Math.min(now - lastTime, 50);
-  lastTime = now;
-  if (gameState === 'playing') update(dt, now);
-  draw(now);
-  requestAnimationFrame(loop);
-}
+    // ── 12. GAME LOOP ─────────────────────────────────────────────
+    function loop(now) {
+      const dt = Math.min(now - lastTime, 50);
+      lastTime = now;
+      if (gameState === 'playing') update(dt, now);
+      draw(now);
+      requestAnimationFrame(loop);
+    }
 
-requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
 
-</script>
+  </script>
 </body>
+
 </html>

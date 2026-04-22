@@ -1,155 +1,173 @@
-# How to Build the Basic Game
+# How to Build a Basic Top-Down Shooter (Vanilla JS + Canvas)
 
-This is the simplest complete version of Sky Assault. Plain rectangles, no sound, no particles. Every line has a reason. Read this before anything else in the project.
+This is the simplest complete version of Sky Assault. One enemy type, no music, no power-ups. It covers every system you need to make a real game — nothing more.
+
+Read this before `howToBuild.md`. Once you understand everything here, that guide makes sense in full.
+
+---
+
+## What's in, what's out
+
+**Included — the core systems:**
+- Canvas setup + dark space background
+- Player ship (rectangle) with WASD / arrow key movement
+- Space to shoot (single bullet stream)
+- One enemy type (straight down, shoots back)
+- Grid wave spawning that grows each wave
+- AABB collision detection
+- 3 lives + invincibility frames after a hit
+- Score + hi-score (localStorage)
+- Wave counter
+- Start screen and game over screen
+- Wave-clear banner
+
+**Left out (covered in `howToBuild.md`):**
+- Parallax starfield
+- Explosion particles
+- Sound effects
+- Multiple enemy types and boss waves
+- Power-ups (spread shot, shield, extra life)
+- Background music
+- Touch / mobile controls
+- Responsive canvas scaling
 
 ---
 
 ## What you're building
 
 ```
-┌─────────────────────────────┐
-│ SCORE 400   WAVE 2   HI 800 │
-│                             │
-│   ██  ██  ██  ██  ██        │  ← enemies (red squares)
-│   ██  ██  ██  ██  ██        │
-│                             │
-│           ██                │  ← player (blue square)
-│ ■ ■ ■                       │  ← lives
-└─────────────────────────────┘
+  ┌─────────────────────────────────┐
+  │  SCORE  400    WAVE 2   HI  800 │
+  │                                 │
+  │      ■   ■   ■   ■   ■         │  ← enemies
+  │      ■   ■   ■   ■   ■         │
+  │                                 │
+  │              ■                  │  ← player
+  │  ■ ■ ■                         │
+  └─────────────────────────────────┘
 ```
 
-- A/D or Arrow keys to move left/right
+- Arrow keys / WASD to move
 - Space to shoot
 - Enemies fly down and shoot back
-- 3 lives — you blink briefly after a hit
+- Three lives — you blink briefly after a hit
 - Score, hi-score, wave counter
 
-Everything is in `game.html`. ~170 lines of JS, no libraries, no build step.
+Everything lives in `basic.html`. ~270 lines of JS, no dependencies.
 
 ---
 
-## The one concept you must understand
+## The core idea — understand this first
 
-A game is not event-driven. It doesn't wait for something to happen. It runs a loop 60 times per second whether anything changed or not:
+A game is not event-driven like a normal web page. Instead of "user clicks → something happens", a game runs a tight loop 60 times per second regardless of whether anything happened.
 
 ```
 requestAnimationFrame fires
-  → update()  — move everything, check collisions, change state
-  → draw()    — wipe the canvas, repaint everything from scratch
-  → schedule the next frame
+    → update()  — move everything, check collisions, mutate state
+    → draw()    — read state and repaint the canvas from scratch
+    → schedule the next frame
 ```
 
-There is no DOM. No HTML elements are created or destroyed. Everything is drawn with the Canvas 2D API each frame.
+There is no DOM, no innerHTML. Everything is painted to a `<canvas>` element using the Canvas 2D API. Each frame the canvas is wiped and redrawn completely.
 
 ---
 
-## Section 0 — HTML shell
-
-The entire game lives in a single `.html` file. There is no build step, no bundler, no dependencies.
+## Step 1 — HTML and canvas setup
 
 ```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Sky Assault — Minimal</title>
+  <title>Sky Assault — Basic</title>
   <style>
-    body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
     canvas { display: block; background: #060616; }
   </style>
 </head>
 <body>
-<canvas id="game"></canvas>
-<script>
-
-  /* all JS goes here */
-
-</script>
+  <canvas id="game"></canvas>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx    = canvas.getContext('2d');
+    const W = canvas.width  = 480;
+    const H = canvas.height = 700;
+  </script>
 </body>
 </html>
 ```
 
-Key points:
-- `margin: 0` removes browser default whitespace. `display: flex` + `justify/align: center` centers the canvas on screen.
-- The `<canvas>` has no `width` or `height` attributes — the JS sets them (Section 1). Without that the default is 300×150.
-- All game code is in one `<script>` block, inlined in the body. Order matters: the `<canvas>` element must exist before the script runs, so the script comes after it.
+`ctx` is the drawing context — everything you draw goes through it. `W` and `H` are the fixed dimensions of the game world. All coordinates live in this 480×700 pixel space.
+
+The CSS centers the canvas in the window.
 
 ---
 
-## Section 1 — Canvas setup
+## Step 2 — Constants and state
 
 ```js
-const canvas = document.getElementById('game');
-const ctx    = canvas.getContext('2d');
-const W = canvas.width  = 480;
-const H = canvas.height = 700;
+const PLAYER_SPEED   = 5;    // pixels per frame
+const BULLET_SPEED   = 10;   // pixels per frame
+const SHOOT_COOLDOWN = 300;  // ms between player shots
+const WAVE_PAUSE     = 1800; // ms between waves
 ```
 
-`ctx` is the drawing context — every drawing command goes through it.  
-`W` and `H` define the game world. All coordinates are in this 480×700 space.
-
----
-
-## Section 2 — Constants
-
 ```js
-const PLAYER_SPEED   = 5;     // pixels per frame
-const BULLET_SPEED   = 10;    // pixels per frame
-const SHOOT_COOLDOWN = 300;   // ms between player shots
-const WAVE_PAUSE     = 1800;  // ms between waves
-```
-
-All timing values are in milliseconds because delta time (`dt`) is in milliseconds. Keep magic numbers here so they're easy to tune.
-
----
-
-## Section 3 — State
-
-```js
-let gameState = 'start';   // 'start' | 'playing' | 'gameover'
-let score     = 0;
-let hiScore   = parseInt(localStorage.getItem('min-hi') || '0');
-let wave      = 1;
-let lastTime  = 0;    // timestamp of previous frame — used to compute dt
-let shootTimer = 0;   // timestamp of last shot — used for cooldown
-let waveTimer  = 0;   // timestamp of when the wave was cleared
+let gameState  = 'start';  // 'start' | 'playing' | 'gameover'
+let score      = 0;
+let hiScore    = parseInt(localStorage.getItem('min-hi') || '0');
+let wave       = 1;
+let lastTime   = 0;
+let shootTimer = 0;
+let waveTimer  = 0;
 let waveDone   = false;
-
-let player       = null;
-let bullets      = [];
-let enemyBullets = [];
-let enemies      = [];
 ```
 
-Entities live in plain arrays. The player is a single object. All positions are **center-based** — `x` and `y` are the center of the rectangle. This matters for collision (see Section 8).
+All timing constants are in milliseconds because delta time (`dt`) is in milliseconds.
 
-`hiScore` is loaded from `localStorage` at startup. `parseInt(... || '0')` handles the first visit when the key doesn't exist.
+`hiScore` is loaded from `localStorage` at startup. `parseInt(... || '0')` handles the first-ever visit when the key doesn't exist yet. It's saved back when the game ends.
 
 ---
 
-## Section 4 — Input
+## Step 3 — Input
 
 ```js
 const keys = {};
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
-  if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') startGame();
+  if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') {
+    startGame();
+  }
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 ```
 
-`keys` is a plain object used as a set. `keys['ArrowLeft']` is `true` while the key is held, `undefined` (falsy) otherwise.
+Rather than reacting to each keydown event, we track which keys are currently held in a plain object. Inside `update()` we check `if (keys['ArrowLeft'])` every frame. This gives smooth continuous movement.
 
-Checking `keys` inside `update()` every frame gives smooth continuous movement. Reacting to individual `keydown` events would give choppy movement with a key-repeat delay.
+`e.preventDefault()` on Space stops the browser from scrolling.
 
-`e.code` is the physical key (layout-independent). `e.key` is the typed character — it changes with keyboard language and Shift.
-
-`e.preventDefault()` on Space stops the browser from scrolling the page.
+> **Why `e.code` not `e.key`?** `e.code` is the physical key (`'Space'`, `'KeyA'`) regardless of keyboard layout. `e.key` gives the typed character, which changes with Shift, Caps Lock, or different keyboard languages.
 
 ---
 
-## Section 5 — Factories
+## Step 4 — Entity collections
+
+```js
+let player       = null;
+let bullets      = [];
+let enemyBullets = [];
+let enemies      = [];
+```
+
+Entities are plain objects in arrays. A bullet is `{ x, y, dy, w, h }`. An enemy is `{ x, y, w, h, speed, shootRate }`. There are no classes.
 
 ```js
 function createPlayer() {
@@ -161,13 +179,32 @@ function createEnemy(x, y) {
 }
 ```
 
-Factory functions return plain objects. No classes needed.
+Factory functions return fresh plain objects. `speed: 0.8 + wave * 0.1` means enemies in wave 5 move 50% faster than wave 1 — difficulty scales automatically without extra logic.
 
-`speed: 0.8 + wave * 0.1` means wave 5 enemies move 50% faster than wave 1. Difficulty scales automatically — no extra logic.
+> **Why plain objects and not classes?** For a game this size, plain objects with standalone functions (`hits(a, b)`) are less code and easier to read in the console. There's no inheritance to think about.
 
 ---
 
-## Section 6 — Wave spawning
+## Step 5 — Start / restart
+
+```js
+function startGame() {
+  gameState    = 'playing';
+  score        = 0;
+  wave         = 1;
+  player       = createPlayer();
+  bullets      = [];
+  enemyBullets = [];
+  waveDone     = false;
+  spawnWave(wave);
+}
+```
+
+Called when Space or Enter is pressed on the start or game over screen. Resets all state and spawns the first wave. This is the only place `player` gets created — until `startGame()` runs, `player` is `null`.
+
+---
+
+## Step 6 — Wave spawning
 
 ```js
 function spawnWave(n) {
@@ -185,181 +222,13 @@ function spawnWave(n) {
 }
 ```
 
-Enemies start at `y = -40` — off-screen above the canvas. Their `y` increases each frame so they fly in naturally.
+Enemies start at `y = -40` or lower — off-screen above the canvas. Their `y` increases each frame so they fly in naturally. No teleporting, no special enter state.
 
-`startX` centers the grid horizontally. `Math.min(..., max)` caps the grid so the canvas never overflows.
-
----
-
-## Section 7 — Start and restart
-
-```js
-function startGame() {
-  gameState    = 'playing';
-  score        = 0;
-  wave         = 1;
-  player       = createPlayer();
-  bullets      = [];
-  enemyBullets = [];
-  waveDone     = false;
-  spawnWave(wave);
-}
-```
-
-Everything is reset here. `spawnWave` fills the enemies array. The game loop is already running — it just starts calling `update` now that `gameState === 'playing'`.
+The grid grows each wave. `Math.min(..., max)` caps the size so the canvas never becomes impossibly crowded. Each wave automatically has more enemies and faster ones (because `createEnemy` reads `wave` directly).
 
 ---
 
-## Section 8 — Collision
-
-```js
-function hits(a, b) {
-  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
-         Math.abs(a.y - b.y) < (a.h + b.h) / 2;
-}
-```
-
-This is AABB (Axis-Aligned Bounding Box). Two rectangles overlap if they overlap on both axes at the same time.
-
-Because all positions are **center-based**, the check is:  
-*"are the centers closer than the sum of their half-widths?"*
-
-If positions were top-left corner instead, you'd need to add `w/2` and `h/2` everywhere — center-based is less arithmetic.
-
----
-
-## Section 9 — Hurt player
-
-```js
-function hurtPlayer() {
-  if (player.invincible > 0) return;
-  player.lives--;
-  player.invincible = 2000;
-  if (player.lives <= 0) {
-    gameState = 'gameover';
-    if (score > hiScore) { hiScore = score; localStorage.setItem('min-hi', hiScore); }
-  }
-}
-```
-
-Called when an enemy bullet or enemy body hits the player.
-
-**Invincibility frames** — `player.invincible` is a countdown in ms. While it's > 0, `hurtPlayer()` returns immediately. Without this, a single enemy spray could wipe all 3 lives at once.
-
-Inside `update()`: `if (player.invincible > 0) player.invincible -= dt;`  
-Inside `draw()`, the player blinks: `if (player.invincible <= 0 || Math.floor(now / 120) % 2 === 0)`.
-
-`Math.floor(now / 120) % 2` alternates between 0 and 1 every 120ms — that's the blink.
-
----
-
-## Section 10 — Update
-
-This is the core of the game. Called once per frame while playing.
-
-**Move player:**
-```js
-if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
-if (keys['ArrowRight']|| keys['KeyD']) player.x += PLAYER_SPEED;
-player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
-```
-`Math.max/min` clamps the player inside the canvas. The bounds account for the half-width so the player doesn't go halfway off-screen.
-
-**Shoot:**
-```js
-if (keys['Space'] && now - shootTimer > SHOOT_COOLDOWN) {
-  shootTimer = now;
-  bullets.push({ x: player.x, y: player.y - player.h / 2, w: 4, h: 12, dy: -BULLET_SPEED });
-}
-```
-The cooldown is a timestamp comparison — no timers, no intervals. `dy` is negative so the bullet travels upward. The bullet spawns at the tip of the player (`player.y - player.h / 2`).
-
-**Move bullets — filter removes off-screen ones:**
-```js
-bullets = bullets.filter(b => { b.y += b.dy; return b.y > 0; });
-```
-`filter` returns a new array containing only elements where the callback returns `true`. Returning `false` removes the element. Here: move the bullet, keep it if still on screen.
-
-**Move enemies and let them fire:**
-```js
-for (const e of enemies) {
-  e.y += e.speed;
-  if (Math.random() < e.shootRate) {
-    enemyBullets.push({ x: e.x, y: e.y + e.h / 2, w: 4, h: 10, dy: 3 + wave * 0.2 });
-  }
-}
-```
-`Math.random() < 0.0008` evaluated at 60fps means an enemy fires roughly once every 21 seconds on average. Low probability × many frames = occasional shots.
-
-**Player bullets vs enemies:**
-```js
-bullets = bullets.filter(b => {
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    if (!hits(b, enemies[i])) continue;
-    score += 100;
-    enemies.splice(i, 1);
-    return false;   // bullet is consumed
-  }
-  return true;
-});
-```
-Iterate enemies backwards so `splice` doesn't mess up the index. Return `false` from the filter to remove the bullet when it hits.
-
-Why `splice` here instead of another `filter`? We're already inside a `bullets.filter` loop — we need to remove the enemy immediately when the hit is found, not after the loop.
-
-**Wave progression:**
-```js
-if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
-if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
-```
-Two separate conditions. The first fires once when all enemies are gone. The second fires after the pause. `waveDone` prevents the first condition from triggering every frame.
-
----
-
-## Section 11 — Draw
-
-The canvas is **stateless** — it remembers nothing between frames. Every frame starts by wiping it:
-
-```js
-ctx.fillStyle = '#060616';
-ctx.fillRect(0, 0, W, H);
-```
-
-Then draw everything in order (back to front):
-1. Background wipe
-2. Start/gameover screen (return early if not playing)
-3. Player rectangle
-4. Bullets
-5. Enemies
-6. HUD (score, wave, lives)
-7. Wave-clear banner
-
-**Drawing rectangles:**
-```js
-ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-```
-`fillRect` takes `(left, top, width, height)`. Because positions are center-based, subtract half-dimensions to get the top-left corner. This is the only offset conversion you need.
-
-**Blinking text** (used for "PRESS SPACE" and player invincibility):
-```js
-if (Math.floor(now / 600) % 2)
-```
-`now / 600` increases over time. `Math.floor` removes the decimal. `% 2` makes it 0 or 1. Alternates every 600ms — draw text when it's 1, skip when it's 0.
-
-**Wave-clear banner with fade in/out:**
-```js
-const t = now - waveTimer;
-const a = Math.min(1, t / 300) * (1 - t / WAVE_PAUSE);
-```
-- `Math.min(1, t / 300)` — ramps from 0→1 in the first 300ms (fade in)
-- `(1 - t / WAVE_PAUSE)` — ramps from 1→0 over the full pause (fade out)
-- Multiplied: fades in quickly, then slowly fades out
-
-Set `ctx.globalAlpha = a` before drawing. Reset it to `1` after.
-
----
-
-## Section 12 — Game loop
+## Step 7 — The game loop
 
 ```js
 function loop(now) {
@@ -373,54 +242,360 @@ function loop(now) {
 requestAnimationFrame(loop);
 ```
 
-`requestAnimationFrame(loop)` — the browser calls `loop` before painting the next frame (~60fps). It passes the current time in ms as `now`.
+`requestAnimationFrame` calls `loop` before the browser paints the next frame, typically 60 times per second. It passes the current timestamp `now` in milliseconds.
 
-`dt` is delta time — how many ms since the last frame (~16ms at 60fps). `Math.min(..., 50)` caps it so switching tabs doesn't teleport entities when you return.
+`dt` is delta time — milliseconds since the last frame (~16ms at 60fps). `Math.min(..., 50)` caps it so switching tabs doesn't teleport entities halfway across the screen when you return.
 
-`update` only runs when `gameState === 'playing'`. `draw` always runs — so the start and gameover screens still work.
+`update` only runs when playing. `draw` always runs — so the start and game over screens are still drawn even though nothing is moving.
 
 ---
 
-## Full flow at a glance
+## Step 8 — Collision detection
+
+```js
+function hits(a, b) {
+  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 &&
+         Math.abs(a.y - b.y) < (a.h + b.h) / 2;
+}
+```
+
+This is **AABB** — Axis-Aligned Bounding Box. Two rectangles overlap if they overlap on both X and Y simultaneously.
+
+Every entity uses `x, y` as its **center** (not top-left corner). That's why the check is `abs(a.x - b.x) < (a.w + b.w) / 2` — the centers must be closer than the sum of their half-widths.
+
+> **Why center-based?** Canvas drawing with `fillRect` still needs a top-left corner, but you subtract `w/2` and `h/2` only once at draw time. Collision math, spawning, and movement all work directly with the center — no constant offset arithmetic.
+
+---
+
+## Step 9 — Hurting the player
+
+```js
+function hurtPlayer() {
+  if (player.invincible > 0) return;
+  player.lives--;
+  player.invincible = 2000;  // ~2 seconds of blinking mercy
+  if (player.lives <= 0) {
+    gameState = 'gameover';
+    if (score > hiScore) { hiScore = score; localStorage.setItem('min-hi', hiScore); }
+  }
+}
+```
+
+**Invincibility frames** are the classic mercy window after a hit. `player.invincible` is set to 2000ms on hit. Inside `update()` it counts down each frame (`player.invincible -= dt`). While it's > 0, `hurtPlayer()` returns immediately — a single enemy spray can't wipe out all lives at once.
+
+---
+
+## Step 10 — The update() function
+
+`update(dt, now)` runs once per frame while `gameState === 'playing'`. It moves everything, checks collisions, and advances game state. Here is the complete function:
+
+```js
+function update(dt, now) {
+  // Move player left/right, clamp to canvas edges
+  if (keys['ArrowLeft'] || keys['KeyA']) player.x -= PLAYER_SPEED;
+  if (keys['ArrowRight'] || keys['KeyD']) player.x += PLAYER_SPEED;
+  player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+  if (player.invincible > 0) player.invincible -= dt;
+
+  // Shoot — inline cooldown check
+  if (keys['Space'] && now - shootTimer > SHOOT_COOLDOWN) {
+    shootTimer = now;
+    bullets.push({ x: player.x, y: player.y - player.h / 2, w: 4, h: 12, dy: -BULLET_SPEED });
+  }
+
+  // Move player bullets; remove when off top of canvas
+  bullets = bullets.filter(b => { b.y += b.dy; return b.y > 0; });
+
+  // Move enemy bullets; remove when off bottom of canvas
+  enemyBullets = enemyBullets.filter(b => { b.y += b.dy; return b.y < H; });
+
+  // Move enemies; let them shoot occasionally
+  for (const e of enemies) {
+    e.y += e.speed;
+    if (Math.random() < e.shootRate) {
+      enemyBullets.push({ x: e.x, y: e.y + e.h / 2, w: 4, h: 10, dy: 3 + wave * 0.2 });
+    }
+  }
+
+  // Player bullets vs enemies
+  bullets = bullets.filter(b => {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      if (!hits(b, enemies[i])) continue;
+      score += 100;
+      enemies.splice(i, 1);  // remove enemy immediately
+      return false;           // bullet is consumed
+    }
+    return true;  // bullet missed everything, keep it
+  });
+
+  // Enemy bullets vs player
+  enemyBullets = enemyBullets.filter(b => {
+    if (!hits(b, player)) return true;
+    hurtPlayer();
+    return false;
+  });
+
+  // Enemies ramming player or leaving canvas
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.y > H + 10) { enemies.splice(i, 1); continue; }
+    if (hits(player, e)) { enemies.splice(i, 1); hurtPlayer(); }
+  }
+
+  // Wave progression
+  if (enemies.length === 0 && !waveDone) { waveDone = true; waveTimer = now; }
+  if (waveDone && now - waveTimer > WAVE_PAUSE) { wave++; spawnWave(wave); }
+}
+```
+
+A few things to notice:
+
+**Invincibility countdown** — `player.invincible -= dt` must be inside `update()`. If you forget it, the player becomes permanently invincible after the first hit.
+
+**Enemy bullets need their own movement filter.** The enemy loop pushes bullets into `enemyBullets`, but a separate filter is still needed to move them each frame and remove off-screen ones.
+
+**Filtering arrays is how you remove entities.** There is no `removeEnemy(id)` function — arrays are replaced each frame by filtering. A callback returning `false` removes the element:
+
+```js
+bullets = bullets.filter(b => {
+  b.y += b.dy;   // move
+  return b.y > 0; // false removes it
+});
+```
+
+**Why `splice` inside the bullet filter but `filter` for enemies elsewhere?** `splice` is used inside the bullet loop because we're already inside a `bullets.filter` — enemies must be removed immediately as hits are found. Outside a nested loop, `filter` is cleaner.
+
+**Enemies ram the player** — if an enemy reaches the player's bounding box it counts as a collision and hurts. If an enemy flies off the bottom without hitting, it's removed silently (no points, no damage).
+
+---
+
+## Step 11 — Drawing with Canvas
+
+Nothing uses DOM elements. Everything is painted with Canvas 2D API calls inside `draw()`.
+
+### Structure and flow of the draw() function
+
+`draw(now)` is called every frame. It receives `now` (the current timestamp in milliseconds) so it can drive time-based effects like blinking text and fade transitions.
+
+The function follows a strict **top-to-bottom layering order** — the **painter's algorithm**: draw what's furthest "back" first, then paint closer things on top. Anything drawn later overwrites what's beneath it.
+
+```
+1. Wipe the canvas (background fill)
+2. Set default text alignment
+3. Early-return screens (start / gameover)
+4. Player ship (with invincibility blink)
+5. Player bullets
+6. Enemy bullets
+7. Enemies
+8. HUD — score, wave, hi-score, lives
+9. Wave-clear banner (floats above everything)
+```
+
+**1. Wipe the canvas**
+
+```js
+ctx.fillStyle = '#060616';
+ctx.fillRect(0, 0, W, H);
+```
+
+The canvas does **not** clear itself between frames. Without this, every frame stacks on top of the previous one and you see motion blur smeared across the entire canvas. A full-screen rectangle wipe is the standard fix.
+
+**2. Default text alignment**
+
+```js
+ctx.textAlign    = 'center';
+ctx.textBaseline = 'middle';
+```
+
+Set once up front so `ctx.fillText('...', W/2, y)` centres text automatically. These are stable defaults — individual HUD items override them inline only when needed.
+
+**3. Early-return screens**
+
+```js
+if (gameState === 'start') {
+  // draw title and instructions
+  return;
+}
+if (gameState === 'gameover') {
+  // draw score and prompts
+  return;
+}
+```
+
+Early `return` keeps the function flat. Everything after this point only runs during actual gameplay — no wrapping `if (gameState === 'playing')` block needed.
+
+**Blinking "PRESS SPACE" text** uses a time-based toggle:
+
+```js
+if (Math.floor(now / 600) % 2) {
+  ctx.fillText('PRESS SPACE TO START', W / 2, H / 2 + 80);
+}
+```
+
+`Math.floor(now / 600)` counts how many 600ms intervals have elapsed. `% 2` alternates between 0 and 1. When it's 1, draw the text; when 0, skip it. No extra state variable — just `now`.
+
+**4. Drawing the player (with invincibility blink)**
+
+```js
+if (player.invincible <= 0 || Math.floor(now / 120) % 2 === 0) {
+  ctx.fillStyle = '#60a5fa';
+  ctx.fillRect(player.x - player.w / 2, player.y - player.h / 2, player.w, player.h);
+}
+```
+
+`fillRect` expects a **top-left corner**, but all entity positions are **centers**. Subtracting half the width and half the height converts from center to top-left — the same offset used everywhere in the draw function.
+
+When `invincible > 0`, `Math.floor(now / 120) % 2` toggles every 120ms, making the ship appear and disappear ~4 times per second. The blink makes it obvious the player is temporarily protected.
+
+**5–7. Bullets and enemies**
+
+```js
+ctx.fillStyle = '#facc15';
+for (const b of bullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+
+ctx.fillStyle = '#f87171';
+for (const b of enemyBullets) ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+
+ctx.fillStyle = '#f87171';
+for (const e of enemies) ctx.fillRect(e.x - e.w / 2, e.y - e.h / 2, e.w, e.h);
+```
+
+Each group sets `fillStyle` once before the loop, not inside it — avoids redundant property assignments on every entity. All three use the same center-to-top-left offset trick.
+
+**8. HUD**
+
+```js
+ctx.font         = 'bold 13px monospace';
+ctx.textBaseline = 'top';
+ctx.fillStyle    = '#ccc';
+ctx.textAlign = 'left';   ctx.fillText('SCORE ' + score,   12, 12);
+ctx.textAlign = 'center'; ctx.fillText('WAVE '  + wave,  W/2, 12);
+ctx.textAlign = 'right';  ctx.fillText('HI '    + hiScore, W - 12, 12);
+```
+
+The HUD is drawn after all game objects so it always appears on top. `textBaseline = 'top'` anchors text to the top of the canvas at `y = 12`. Each item overrides `textAlign` inline — left for score, centre for wave, right for hi-score — so all three sit at the same `y` and snap to their respective edges.
+
+Lives are small squares, not text:
+
+```js
+ctx.fillStyle = '#60a5fa';
+for (let i = 0; i < player.lives; i++) ctx.fillRect(12 + i * 18, H - 22, 12, 12);
+```
+
+**9. Wave-clear banner**
+
+```js
+if (waveDone) {
+  const t = now - waveTimer;
+  const a = Math.min(1, t / 300) * (1 - t / WAVE_PAUSE);
+  if (a > 0) {
+    ctx.globalAlpha = a;
+    ctx.fillStyle   = '#facc15';
+    ctx.font        = 'bold 34px monospace';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('WAVE CLEAR!', W / 2, H / 2);
+    ctx.globalAlpha = 1;
+  }
+}
+```
+
+`globalAlpha` scales the opacity of everything drawn while it's active. The alpha formula breaks into two parts:
+
+- `Math.min(1, t / 300)` — ramps 0→1 over the first 300ms (fast fade in)
+- `(1 - t / WAVE_PAUSE)` — decreases 1→0 over the full 1800ms pause (slow fade out)
+
+Multiplied together: the banner arrives quickly and fades out gradually. When `a <= 0` the guard skips drawing entirely.
+
+`ctx.globalAlpha = 1` resets opacity immediately after. If you forget this, every subsequent draw call in every future frame will be partially transparent.
+
+---
+
+## Step 12 — The screens
+
+Three game states: `'start'`, `'playing'`, `'gameover'`. The `draw()` function reads `gameState` and branches:
+
+```js
+function draw(now) {
+  ctx.fillStyle    = '#060616';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (gameState === 'start')    { /* title + instructions */ return; }
+  if (gameState === 'gameover') { /* score + prompt       */ return; }
+
+  // Playing: player, enemies, bullets, HUD, wave-clear banner
+}
+```
+
+**Blinking text** uses `Math.floor(now / 600) % 2` — toggles between 0 and 1 every 600ms. If it's 1, draw the text; if 0, skip it. No extra timer variable needed.
+
+**Wave-clear banner** fades in then out using a single alpha formula:
+
+```js
+const elapsed = now - waveTimer;
+const alpha   = Math.min(1, elapsed / 300) * (1 - elapsed / WAVE_PAUSE);
+```
+
+`Math.min(1, elapsed / 300)` ramps from 0→1 over the first 300ms (fade in). `(1 - elapsed / WAVE_PAUSE)` goes from 1→0 over the full pause duration (fade out). Multiplied together: the banner fades in quickly and then slowly fades out. When `alpha <= 0`, skip drawing.
+
+---
+
+## The full picture
 
 ```
 Boot
   → requestAnimationFrame(loop)
 
-Each frame
+Each frame (loop)
   → dt = min(now - lastTime, 50)
   → if playing: update(dt, now)
-      → move player (read keys, clamp)
-      → cooldown check → maybe spawn bullet
-      → move player bullets (filter off-screen)
-      → move enemy bullets (filter off-screen)
-      → move enemies + maybe fire
-      → collide: bullets vs enemies → score, remove
-      → collide: enemy bullets vs player → hurtPlayer
-      → collide: enemies vs player → hurtPlayer
-      → wave done? → set timer → advance wave
   → draw(now)
-      → wipe canvas
-      → start / gameover screen? → return early
-      → player (blink if invincible)
-      → bullets, enemy bullets, enemies
-      → HUD, lives, wave-clear banner
   → requestAnimationFrame(loop)
+
+update(dt, now)
+  → move player (read keys, clamp to canvas)
+  → tick invincibility timer (player.invincible -= dt)
+  → shoot if Space held (cooldown check)
+  → move player bullets (filter off top)
+  → move enemy bullets (filter off bottom)
+  → move enemies + occasionally fire
+  → collide: player bullets vs enemies → score
+  → collide: enemy bullets vs player → hurtPlayer
+  → collide: enemies ramming player → hurtPlayer
+  → enemies leaving canvas → remove silently
+  → if enemies.length === 0 → waveDone → waveTimer
+  → if waveDone and pause elapsed → wave++, spawnWave
+
+draw(now)
+  → wipe canvas
+  → if start: title + instructions → return
+  → if gameover: score text + prompt → return
+  → player ship (blue rect, blink if invincible)
+  → player bullets (yellow rects)
+  → enemy bullets (red rects)
+  → enemies (red rects)
+  → HUD: score, wave, hi-score, lives
+  → wave-clear banner (if active)
 ```
 
 ---
 
-## What's in `basic.html` (the next step)
+## What to add next
 
-Once this version makes sense, `../../basic.html` adds:
+Once this is working and you understand every line, `howToBuild.md` walks through adding:
 
 | Feature | What changes |
 |---|---|
-| Scrolling starfield | 100 objects in a `stars` array, wrapping `y` |
-| Triangle ships | `drawShip()` function using `ctx.beginPath/lineTo/fill` |
-| Explosion particles | `particles` array, `life` countdown, `globalAlpha` fade |
-| Web Audio sounds | `AudioContext`, oscillators, noise buffers |
-| Touch controls | `touchstart/move/end` events, inverse canvas projection |
-| Responsive scaling | `canvas.style.width/height` scaled to fit the window |
+| Multiple enemy types | `ENEMY_TEMPLATES` + `createEnemy(x, y, type)` |
+| Enemy boss waves | Branch in `spawnWave` on `waveNum % 5 === 0` |
+| Power-ups | New entity array, new collision check, timed player state |
+| Parallax starfield | `stars` array, scroll in `update()`, draw with `globalAlpha` |
+| Explosion particles | `particles` array, `explode(x, y)`, age + filter each frame |
+| Sound effects | Web Audio API — oscillators + gain nodes, no audio files |
+| Background music | Look-ahead scheduler with Web Audio API |
+| Touch controls | `touchstart/move/end` + inverse projection for position |
+| Hi-score persistence | Already in this version — `localStorage.getItem/setItem` |
 
-Each feature adds a new section in `update()` and a new section in `draw()`. The loop structure never changes.
+Each feature slots into the same loop. `update` handles the new logic, `draw` handles the new visuals. The pattern doesn't change — just more objects in the arrays.
