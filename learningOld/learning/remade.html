@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Sky Assault</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            height: 100dvh;
+            /* dynamic viewport height — accounts for iOS address bar */
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+
+        /* hand all touch events to JS */
+    </style>
+</head>
+
+<body>
+    <canvas id="game"></canvas>
+    <script>
+        //canvas
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width = 480;
+        const H = canvas.height = 700;
+
+        //state
+        let gameState = 'start';   // 'start' | 'playing' | 'gameover'
+        let score = 0;
+        let hiScore = parseInt(localStorage.getItem('sky-assault-hi') || '0');
+        let wave = 1;
+        let lastTime = 0;
+        let shootTimer = 0;
+        let waveTimer = 0;
+        let waveDone = false;
+        //entities
+        let player = null;
+        let bullets = [];   // player bullets
+        let enemyBullets = [];
+        let enemies = [];
+        let particles = [];
+        let powerUps = [];
+        let stars = [];
+
+        //constants
+        const PLAYER_SPEED = 5;
+        const BULLET_SPEED = 11;
+        const ENEMY_BULLET_SPEED = 4;
+        const SHOOT_COOLDOWN = 180;   // ms between player shots
+        const WAVE_PAUSE = 2200;  // ms between waves
+
+
+        //input
+        const keys = {};
+        document.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            getAudio();   // ensure AudioContext is created/resumed on first key press
+            if (e.code === 'Space') e.preventDefault();
+            if (e.code === 'KeyM') toggleMute();
+            if ((e.code === 'Space' || e.code === 'Enter') && gameState !== 'playing') {
+                startGame();
+            }
+        });
+        document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+
+        //entities
+        function createPlayer() {
+            return {
+                x: W / 2, y: H - 80,
+                w: 36, h: 40,
+                lives: 5,
+                invincible: 0,      // ms remaining; player blinks and cannot be hit
+                powerUp: null,      // 'spread' | 'shield' | null
+                powerTimer: 0,      // ms remaining on active power-up
+            };
+        }
+
+
+        //factories
+        const ENEMY_TEMPLATES = {
+            basic: { w: 32, h: 28, hp: 1, speed: 1.6, score: 100, color: '#f87171', shootRate: 0.0018 },
+            zigzag: { w: 28, h: 26, hp: 1, speed: 1.8, score: 150, color: '#fb923c', shootRate: 0.001 },
+            tank: { w: 40, h: 36, hp: 3, speed: 0.9, score: 300, color: '#a78bfa', shootRate: 0.003 },
+            boss: { w: 80, h: 60, hp: 20, speed: 1.0, score: 2000, color: '#f43f5e', shootRate: 0.007 },
+        };
+
+        function createEnemy(x, y, type) {
+            const t = ENEMY_TEMPLATES[type];
+            return {
+                x, y,
+                w: t.w, h: t.h,
+                hp: t.hp, maxHp: t.hp,
+                speed: t.speed,
+                score: t.score,
+                color: t.color,
+                type,
+                shootRate: t.shootRate,
+                angle: 0,      // used for oscillation (zigzag / boss)
+                hitFlash: 0,   // frames to flash white after being hit
+            };
+        }
+
+
+    </script>
+</body>
+
+</html>

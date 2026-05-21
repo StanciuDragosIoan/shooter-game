@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1</title>
+</head>
+
+<body>
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const canvasWidth = 480;
+        const canvasHeight = 400;
+
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = '#060616';
+        //x, y, width, height
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+
+        //constants
+        const PLAYER_SPEED = 5;
+        const BULLET_SPEED = 12;
+        const SHOOT_COOLDOWN = 200;
+        const ENEMY_SPEED = 1.5;
+
+        const player = {
+            x: canvasWidth / 2,
+            y: canvasHeight - 60,
+            w: 36,
+            h: 40
+        }
+
+        let bullet = null
+        let shootTimer = 0
+        let gameState = 'playing'
+
+        const enemy = {
+            x: 60 + Math.random() * 360,
+            y: - 30,
+            w: 32,
+            h: 28
+        }
+
+        const keys = {
+
+        }
+
+
+        const keyDownHandler = (e) => {
+            if (e.code === 'Space') e.preventDefault();
+            keys[e.code] = true;
+
+
+        }
+
+        const keyUpHandler = (e) => {
+            keys[e.code] = false;
+        }
+
+        function draw() {
+            console.log("Drawing");
+
+            //background
+            ctx.fillStyle = "#060616";
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            //player
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y - player.h / 2);
+            ctx.lineTo(player.x + player.w / 2, player.y + player.h / 2);
+            ctx.lineTo(player.x - player.w / 2, player.y + player.h / 2);
+            ctx.closePath();
+            ctx.fillStyle = '#60a5fa';
+            ctx.fill();
+
+
+
+        }
+
+        function update(now) {
+            console.log("calling update", now)
+        }
+
+        function loop(now) {
+            update(now);
+            draw(now)
+            console.log("calling loop", now);
+            requestAnimationFrame(loop)
+        }
+
+        requestAnimationFrame(loop)
+
+        document.addEventListener("keydown", keyDownHandler);
+        document.addEventListener("keyup", keyUpHandler);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Keyboard Input Minimal Demo</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      padding: 20px;
+    }
+    #state {
+      margin-top: 20px;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+
+<h3>Minimal Keyboard State Demo</h3>
+<p>Press any keys (WASD, Space, Enter, M, arrows)</p>
+
+<div id="state">keys = {}</div>
+
+<script>
+// Stores current key state: true = pressed, false = not pressed
+const keys = {};
+
+const stateEl = document.getElementById('state');
+
+function render() {
+  stateEl.textContent = "keys = " + JSON.stringify(keys, null, 2);
+}
+
+// KEY DOWN: mark key as pressed
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  render();
+});
+
+// KEY UP: mark key as released
+document.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  render();
+});
+
+</script>
+
+</body>
+</html>

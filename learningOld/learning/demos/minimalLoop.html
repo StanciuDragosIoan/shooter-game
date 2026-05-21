@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Minimal Game Loop Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: monospace;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: #0b0b0b;
+        }
+
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="info">
+        Press LEFT / RIGHT
+    </div>
+
+    <canvas id="c"></canvas>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const W = canvas.width;
+        const H = canvas.height;
+
+        // ----------------------
+        // INPUT
+        // ----------------------
+        const keys = {};
+
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // ----------------------
+        // GAME STATE (just one object)
+        // ----------------------
+        const player = {
+            x: W / 2,
+            y: H / 2,
+            size: 40,
+            speed: 5
+        };
+
+        // ----------------------
+        // UPDATE (logic only)
+        // ----------------------
+        function update() {
+            if (keys['ArrowLeft']) player.x -= player.speed;
+            if (keys['ArrowRight']) player.x += player.speed;
+            if (keys['ArrowUp']) player.y -= player.speed;
+            if (keys['ArrowDown']) player.y += player.speed;
+
+            // keep inside screen
+            if (player.x < 0) player.x = 0;
+            if (player.x > W - player.size) player.x = W - player.size;
+
+            if (player.y < 0) player.y = 0
+            if (player.y > H - player.size) player.y = H - player.size;
+
+        }
+
+        // ----------------------
+        // RENDER (draw only)
+        // ----------------------
+        function render() {
+            ctx.clearRect(0, 0, W, H);
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+        }
+
+        // ----------------------
+        // GAME LOOP
+        // ----------------------
+        function loop() {
+            update();   // 1. change state
+            render();   // 2. draw state
+            requestAnimationFrame(loop); // 3. repeat
+        }
+
+        loop();
+    </script>
+
+</body>
+
+</html>

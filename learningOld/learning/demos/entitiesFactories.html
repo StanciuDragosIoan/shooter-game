@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Entity & Factory Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: #0b0b0b;
+        }
+
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="c"></canvas>
+    <div id="info">Arrow keys to move</div>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const W = canvas.width;
+        const H = canvas.height;
+
+        // =====================
+        // INPUT
+        // =====================
+        const keys = {};
+        document.addEventListener('keydown', e => keys[e.code] = true);
+        document.addEventListener('keyup', e => keys[e.code] = false);
+
+        // =====================
+        // ENTITY: PLAYER FACTORY
+        // =====================
+        function createPlayer() {
+            return {
+                x: W / 2,
+                y: H - 80,
+                w: 36,
+                h: 40,
+                speed: 4
+            };
+        }
+
+        // =====================
+        // ENEMY TEMPLATES (FACTORY DATA)
+        // =====================
+        const ENEMY_TEMPLATES = {
+            basic: { w: 32, h: 28, speed: 1.6, color: '#f87171' },
+            tank: { w: 40, h: 36, speed: 0.9, color: '#a78bfa' }
+        };
+
+        // =====================
+        // ENEMY FACTORY
+        // =====================
+        function createEnemy(x, y, type) {
+            const t = ENEMY_TEMPLATES[type];
+            return {
+                x, y,
+                w: t.w,
+                h: t.h,
+                speed: t.speed,
+                color: t.color,
+                type
+            };
+        }
+
+        // =====================
+        // GAME STATE
+        // =====================
+        const player = createPlayer();
+        const enemies = [];
+
+        // spawn enemies
+        setInterval(() => {
+            const types = ['basic', 'tank'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            const x = Math.random() * W;
+            enemies.push(createEnemy(x, -20, type));
+        }, 800);
+
+        // =====================
+        // UPDATE LOOP
+        // =====================
+        function update() {
+            // player movement
+            if (keys['ArrowLeft']) player.x -= player.speed;
+            if (keys['ArrowRight']) player.x += player.speed;
+            if (keys['ArrowUp']) player.y -= player.speed;
+            if (keys['ArrowDown']) player.y += player.speed;
+
+            // keep player in bounds
+            player.x = Math.max(0, Math.min(W, player.x));
+            player.y = Math.max(0, Math.min(H, player.y));
+
+            // move enemies
+            for (const e of enemies) {
+                e.y += e.speed;
+            }
+        }
+
+        // =====================
+        // DRAW
+        // =====================
+        function drawRect(e) {
+            ctx.fillStyle = e.color;
+            ctx.fillRect(e.x, e.y, e.w, e.h);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, W, H);
+
+            // player
+            ctx.fillStyle = 'white';
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+
+            // enemies
+            for (const e of enemies) {
+                drawRect(e);
+            }
+        }
+
+        // =====================
+        // LOOP
+        // =====================
+        function loop() {
+            update();
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+
+</body>
+
+</html>
